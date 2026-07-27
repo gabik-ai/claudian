@@ -1,3 +1,4 @@
+import { TaskStateReducer } from '../../../core/tools/taskState';
 import type { UsageInfo } from '../../../core/types';
 import type {
   ChatMessage,
@@ -48,6 +49,13 @@ function createInitialState(): ChatStateData {
 export class ChatState {
   private state: ChatStateData;
   private _callbacks: ChatStateCallbacks;
+  /**
+   * mazel: folds TaskCreate/TaskUpdate/TaskList back into a TodoItem[].
+   *
+   * Deliberately an instance field and not a module-global: two tabs stream at
+   * the same time, and a shared reducer would merge their task lists into one.
+   */
+  private readonly _taskState = new TaskStateReducer();
   private thinkingIndicatorTimeoutWindow: Window | null = null;
   private flavorTimerIntervalWindow: Window | null = null;
 
@@ -290,6 +298,21 @@ export class ChatState {
     return this.state.currentTodos ? [...this.state.currentTodos] : null;
   }
 
+  /** mazel: the reducer behind the stateful Task tools. */
+  get taskState(): TaskStateReducer {
+    return this._taskState;
+  }
+
+  /**
+   * mazel: recompute the panel from the reducer. Called by StreamController
+   * after every task tool call that actually changed something.
+   */
+  syncTodosFromTaskState(): void {
+    if (this._taskState.hasTasks()) {
+      this.currentTodos = this._taskState.toTodoItems();
+    }
+  }
+
   set currentTodos(value: TodoItem[] | null) {
     // Normalize empty arrays to null for consistency
     const normalizedValue = (value && value.length > 0) ? value : null;
@@ -429,6 +452,9 @@ export class ChatState {
     this.clearMaps();
     this.state.queuedMessage = null;
     this.usage = null;
+    // mazel: the reducer holds ids from the old conversation. Without this a
+    // buffered TaskCreate resolves into the NEXT conversation's list.
+    this._taskState.reset();
     this.currentTodos = null;
     this.autoScrollEnabled = true;
   }

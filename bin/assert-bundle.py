@@ -95,6 +95,19 @@ def check_m5(bundle: str) -> tuple[str, bool, str]:
     return ok("M5 deny keeps turn alive", "continue:true neben permissionDecision:deny")
 
 
+def check_task_reducer(bundle: str) -> tuple[str, bool, str]:
+    # String literals survive minification; the reducer's class and method names
+    # do not reliably. So assert on the four tool names plus the one behaviour
+    # that is uniquely ours: treating "deleted" as a removal.
+    missing = [name for name in ("TaskCreate", "TaskUpdate", "TaskList", "TaskGet")
+               if f'"{name}"' not in bundle]
+    if missing:
+        return fail("task reducer", f"Tool-Namen fehlen im Bundle: {', '.join(missing)}")
+    if '"deleted"' not in bundle:
+        return fail("task reducer", 'kein "deleted"-Zweig — Tasks würden als erledigt gezählt')
+    return ok("task reducer", "alle vier Task-Tools + deleted-Zweig vorhanden")
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
@@ -118,6 +131,7 @@ def main() -> int:
         check_m1(bundle),
         check_m2(bundle),
         check_m5(bundle),
+        check_task_reducer(bundle),
     ]
 
     failed = 0

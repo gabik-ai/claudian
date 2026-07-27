@@ -10,6 +10,7 @@ import {
 } from '../../../core/providers/types';
 import type { ChatRuntime } from '../../../core/runtime/ChatRuntime';
 import type { AsyncSubagentCompletion } from '../../../core/runtime/types';
+import { isTaskTool } from '../../../core/tools/taskState';
 import { parseTodoInput } from '../../../core/tools/todo';
 import { extractResolvedAnswers, extractResolvedAnswersFromResultText } from '../../../core/tools/toolInput';
 import {
@@ -296,6 +297,13 @@ export class StreamController {
           }
         }
 
+        // mazel: same for the stateful task tools. A TaskUpdate carries its
+        // taskId in the input, so it lands here rather than waiting for the
+        // result — the panel stays a round trip ahead.
+        if (isTaskTool(existingToolCall.name)) {
+          this.applyTaskToolUse(chunk.id, existingToolCall.name, existingToolCall.input);
+        }
+
         // Capture plan file path on input updates (file_path may arrive in a later chunk)
         if (existingToolCall.name === TOOL_WRITE) {
           this.capturePlanFilePath(existingToolCall.input);
@@ -347,6 +355,11 @@ export class StreamController {
       if (todos) {
         this.deps.state.currentTodos = todos;
       }
+    }
+
+    // mazel: the stateful task tools that replaced TodoWrite.
+    if (isTaskTool(chunk.name)) {
+      this.applyTaskToolUse(chunk.id, chunk.name, chunk.input);
     }
 
     // Track Write to provider plan directory for plan mode (used by approve-new-session)
@@ -871,12 +884,46 @@ export class StreamController {
     finalizeSubagentBlock(state as SubagentState, result, isError);
   }
 
+  /**
+   * mazel: feed a task tool call into the reducer and refresh the panel.
+   *
+   * Kept in one place because it is called from three points in the stream
+   * (new tool_use, updated tool_use, tool_result) and each of them can be the
+   * one that actually changes the list.
+   */
+  private applyTaskToolUse(
+    toolUseId: string,
+    name: string,
+    input: Record<string, unknown> | undefined,
+  ): void {
+    if (this.deps.state.taskState.noteToolUse(toolUseId, name, input)) {
+      this.deps.state.syncTodosFromTaskState();
+    }
+  }
+
   private async handleToolResult(
     chunk: { type: 'tool_result'; id: string; content: string; isError?: boolean; toolUseResult?: SDKToolUseResult },
     msg: ChatMessage
   ): Promise<void> {
     const { state, subagentManager } = this.deps;
     const normalizedContent = this.normalizeToolResultContent(chunk.content);
+
+    // mazel: TaskCreate's id only exists in the result, so this is the point
+    // where a newly created task can finally enter the list. Runs before the
+    // subagent/async branches below, all of which return early.
+    const taskToolCall = msg.toolCalls?.find(tc => tc.id === chunk.id);
+    if (taskToolCall && isTaskTool(taskToolCall.name)) {
+      const changed = state.taskState.applyToolResult(
+        chunk.id,
+        taskToolCall.name,
+        normalizedContent,
+        chunk.toolUseResult,
+        chunk.isError,
+      );
+      if (changed) {
+        state.syncTodosFromTaskState();
+      }
+    }
 
     const lifecycleToolCall = msg.toolCalls?.find(toolCall => toolCall.id === chunk.id);
     const lifecycleAdapter = lifecycleToolCall

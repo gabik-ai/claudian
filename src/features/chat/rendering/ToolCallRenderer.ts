@@ -16,6 +16,10 @@ import {
   TOOL_LS,
   TOOL_READ,
   TOOL_SKILL,
+  TOOL_TASK_CREATE,
+  TOOL_TASK_GET,
+  TOOL_TASK_LIST,
+  TOOL_TASK_UPDATE,
   TOOL_TODO_WRITE,
   TOOL_TOOL_SEARCH,
   TOOL_WEB_FETCH,
@@ -67,12 +71,33 @@ export function getToolName(name: string, input: Record<string, unknown>): strin
       }
       return 'Tasks';
     }
+    // mazel: without these the panel header shows the raw tool name, which is
+    // exactly what upstream issue #934 reports.
+    case TOOL_TASK_CREATE:
+      return 'New task';
+    case TOOL_TASK_UPDATE:
+      return getTaskUpdateName(input);
+    case TOOL_TASK_LIST:
+      return 'Tasks';
+    case TOOL_TASK_GET:
+      return 'Task';
     case TOOL_ENTER_PLAN_MODE:
       return 'Entering plan mode';
     case TOOL_EXIT_PLAN_MODE:
       return 'Plan complete';
     default:
       return name;
+  }
+}
+
+/** mazel: "Task done" / "Task started" reads better than a bare tool name. */
+function getTaskUpdateName(input: Record<string, unknown>): string {
+  switch (input.status) {
+    case 'completed': return 'Task done';
+    case 'in_progress': return 'Task started';
+    case 'deleted': return 'Task removed';
+    case 'pending': return 'Task reopened';
+    default: return 'Task updated';
   }
 }
 
@@ -102,6 +127,14 @@ export function getToolSummary(name: string, input: Record<string, unknown>): st
     case TOOL_TOOL_SEARCH:
       return truncateText(parseToolSearchQuery(getInputText(input, 'query')), 60);
     case TOOL_TODO_WRITE:
+      return '';
+    // mazel: the subject is the only useful thing to show for a task call.
+    case TOOL_TASK_CREATE:
+      return truncateText(getInputText(input, 'subject'), 60);
+    case TOOL_TASK_UPDATE:
+      return truncateText(getInputText(input, 'subject'), 60);
+    case TOOL_TASK_LIST:
+    case TOOL_TASK_GET:
       return '';
     case TOOL_APPLY_PATCH:
       return getApplyPatchSummary(input);
@@ -149,6 +182,14 @@ export function getToolLabel(name: string, input: Record<string, unknown>): stri
       }
       return 'Tasks';
     }
+    case TOOL_TASK_CREATE:
+      return `New task: ${getInputText(input, 'subject', 'task')}`;
+    case TOOL_TASK_UPDATE:
+      return `${getTaskUpdateName(input)}: ${getInputText(input, 'subject', getInputText(input, 'taskId', 'task'))}`;
+    case TOOL_TASK_LIST:
+      return 'Tasks';
+    case TOOL_TASK_GET:
+      return `Task: ${getInputText(input, 'taskId', 'task')}`;
     case TOOL_SKILL: {
       const skillName = getInputText(input, 'skill', 'skill');
       return `Skill: ${skillName}`;

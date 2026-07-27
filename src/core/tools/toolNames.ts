@@ -15,6 +15,13 @@ export const TOOL_READ_MCP_RESOURCE = 'ReadMcpResource' as const;
 export const TOOL_SKILL = 'Skill' as const;
 export const TOOL_SUBAGENT = 'Agent' as const;
 export const TOOL_TODO_WRITE = 'TodoWrite' as const;
+// mazel: the stateful task tools that replaced TodoWrite. Upstream 2.0.41 does
+// not know these names at all (grep gives 0 hits), which is why the status
+// panel stays empty — see src/core/tools/taskState.ts.
+export const TOOL_TASK_CREATE = 'TaskCreate' as const;
+export const TOOL_TASK_UPDATE = 'TaskUpdate' as const;
+export const TOOL_TASK_LIST = 'TaskList' as const;
+export const TOOL_TASK_GET = 'TaskGet' as const;
 export const TOOL_TOOL_SEARCH = 'ToolSearch' as const;
 export const TOOL_WEB_FETCH = 'WebFetch' as const;
 export const TOOL_WEB_SEARCH = 'WebSearch' as const;

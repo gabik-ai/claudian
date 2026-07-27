@@ -22,6 +22,10 @@ import {
   TOOL_SKILL,
   TOOL_SPAWN_AGENT,
   TOOL_SUBAGENT,
+  TOOL_TASK_CREATE,
+  TOOL_TASK_GET,
+  TOOL_TASK_LIST,
+  TOOL_TASK_UPDATE,
   TOOL_TODO_WRITE,
   TOOL_TOOL_SEARCH,
   TOOL_WAIT,
@@ -44,6 +48,12 @@ const TOOL_ICONS: Record<string, string> = {
   [TOOL_GREP]: 'search',
   [TOOL_LS]: 'list',
   [TOOL_TODO_WRITE]: 'list-checks',
+  // mazel: the stateful task tools share the todo iconography, because they
+  // are the same feature under a new protocol.
+  [TOOL_TASK_CREATE]: 'list-plus',
+  [TOOL_TASK_UPDATE]: 'list-checks',
+  [TOOL_TASK_LIST]: 'list-checks',
+  [TOOL_TASK_GET]: 'list-checks',
   [TOOL_SUBAGENT]: 'bot',
   [TOOL_LIST_MCP_RESOURCES]: 'list',
   [TOOL_READ_MCP_RESOURCE]: 'file-text',
