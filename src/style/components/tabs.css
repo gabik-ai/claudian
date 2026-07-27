@@ -56,6 +56,24 @@
   padding: 0 8px;
 }
 
+/* mazel: inline rename state. Reads as an input field so it is obvious the
+   badge is editable, without shifting the layout. */
+.claudian-tab-badge-renaming {
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  width: auto;
+  max-width: none;
+  min-width: 8ch;
+  padding: 0 8px;
+  cursor: text;
+  overflow: visible;
+  white-space: pre;
+  background: var(--background-primary);
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 1px var(--interactive-accent);
+  outline: none;
+}
+
 .claudian-tab-badge:hover {
   background: var(--background-modifier-hover);
   color: var(--text-normal);

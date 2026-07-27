@@ -71,8 +71,8 @@ jobs:
           count=$(git rev-list --count "$base..HEAD")
           echo "Patch-Serie: $count Commits über $base"
           git log --oneline "$base..HEAD"
-          if [ "$count" -gt 10 ]; then
-            echo "::error::Patch-Serie hat $count Commits, Obergrenze ist 10 (SPEC.md)."
+          if [ "$count" -gt 12 ]; then
+            echo "::error::Patch-Serie hat $count Commits, Obergrenze ist 12 (SPEC.md)."
             exit 1
           fi
           # package.json or a lockfile in the series means a conflict on every

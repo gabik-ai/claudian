@@ -43,9 +43,34 @@ export function normalizeTabManagerState(data: unknown): AppTabManagerState | nu
     }
   }
 
+  // mazel: conversations the user named by hand.
+  //
+  // Deliberately NOT filtered against the open tabs, unlike expandedTitleTabIds
+  // above. That filter is right for a view state that dies with its tab; it
+  // would be wrong here, because the whole point of the name is to find a
+  // CLOSED conversation again in the history list. Filtering would delete the
+  // name of every conversation the moment its tab is closed.
+  const userNamedConversationIds: string[] = [];
+  const seenNamedConversationIds = new Set<string>();
+  if (Array.isArray(data.userNamedConversationIds)) {
+    for (const conversationId of data.userNamedConversationIds) {
+      if (
+        typeof conversationId !== 'string'
+        || conversationId.length === 0
+        || seenNamedConversationIds.has(conversationId)
+      ) {
+        continue;
+      }
+
+      userNamedConversationIds.push(conversationId);
+      seenNamedConversationIds.add(conversationId);
+    }
+  }
+
   return {
     openTabs,
     activeTabId: typeof data.activeTabId === 'string' ? data.activeTabId : null,
     ...(expandedTitleTabIds.length > 0 ? { expandedTitleTabIds } : {}),
+    ...(userNamedConversationIds.length > 0 ? { userNamedConversationIds } : {}),
   };
 }

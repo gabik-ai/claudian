@@ -268,6 +268,8 @@ export interface PersistedTabManagerState {
   openTabs: PersistedTabState[];
   activeTabId: TabId | null;
   expandedTitleTabIds?: TabId[];
+  /** mazel: conversations the user named by hand. Survives closing the tab. */
+  userNamedConversationIds?: string[];
 }
 
 /**
@@ -315,6 +317,15 @@ export interface TabBarItem {
   id: TabId;
   /** 1-based index for display. */
   index: number;
+  /**
+   * mazel: the conversation this tab is showing, or null for a blank tab.
+   *
+   * A user-given tab name has to survive closing and reopening the tab, so it
+   * is keyed on the conversation, never on the tab. Tab ids are handed out
+   * fresh when a conversation is reopened from history; keying on them would
+   * lose the name at exactly the moment the user goes looking for it.
+   */
+  conversationId: string | null;
   title: string;
   providerId: ProviderId;
   isActive: boolean;

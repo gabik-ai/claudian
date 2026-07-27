@@ -17,6 +17,7 @@ function createTabBarItem(overrides: Partial<TabBarItem> = {}): TabBarItem {
   return {
     id: 'tab-1',
     index: 1,
+    conversationId: 'conv-1',
     title: 'Test Tab',
     providerId: 'claude',
     isActive: false,
@@ -111,48 +112,11 @@ describe('TabBar', () => {
       expect(containerEl._children[0].getAttribute('data-provider')).toBe('opencode');
     });
 
-    it('should toggle between index and title labels on double click', () => {
-      const containerEl = createMockEl();
-      const callbacks = createMockCallbacks();
-      const tabBar = new TabBar(containerEl, callbacks);
-
-      tabBar.update([createTabBarItem({ index: 2, title: 'My Conversation' })]);
-
-      const badge = containerEl._children[0];
-      const event = { preventDefault: jest.fn(), stopPropagation: jest.fn() };
-
-      badge.dispatchEvent('dblclick', event);
-
-      expect(badge.textContent).toBe('My Conversation');
-      expect(badge.hasClass('claudian-tab-badge-expanded')).toBe(true);
-      expect(badge.getAttribute('data-title-expanded')).toBe('true');
-      expect(event.preventDefault).toHaveBeenCalled();
-      expect(event.stopPropagation).toHaveBeenCalled();
-
-      badge.dispatchEvent('dblclick', { preventDefault: jest.fn(), stopPropagation: jest.fn() });
-
-      expect(badge.textContent).toBe('2');
-      expect(badge.hasClass('claudian-tab-badge-expanded')).toBe(false);
-      expect(badge.getAttribute('data-title-expanded')).toBe('false');
-    });
-
-    it('should notify when title expansion state changes', () => {
-      const containerEl = createMockEl();
-      const callbacks = {
-        ...createMockCallbacks(),
-        onTitleExpansionChanged: jest.fn(),
-      };
-      const tabBar = new TabBar(containerEl, callbacks);
-
-      tabBar.update([createTabBarItem({ id: 'tab-2', index: 2, title: 'My Conversation' })]);
-
-      const badge = containerEl._children[0];
-      badge.dispatchEvent('dblclick', { preventDefault: jest.fn(), stopPropagation: jest.fn() });
-      badge.dispatchEvent('dblclick', { preventDefault: jest.fn(), stopPropagation: jest.fn() });
-
-      expect(callbacks.onTitleExpansionChanged).toHaveBeenNthCalledWith(1, ['tab-2']);
-      expect(callbacks.onTitleExpansionChanged).toHaveBeenNthCalledWith(2, []);
-    });
+    // mazel: upstream's "toggle between index and title on dblclick" and
+    // "notify when title expansion state changes" tests lived here. Both are
+    // deleted, not repaired: dblclick now starts an inline rename and
+    // toggleBadgeTitle() is gone from TabBar entirely (decision 2026-07-27).
+    // The rename gesture is covered in tests/unit/mazel/tab-rename.test.ts.
 
     it('should render restored expanded title state', () => {
       const containerEl = createMockEl();
@@ -167,38 +131,26 @@ describe('TabBar', () => {
       expect(tabBar.getExpandedTitleTabIds()).toEqual(['tab-1']);
     });
 
+    // mazel: the truncation logic is upstream's and still lives; only its
+    // trigger moved. A badge shows a title because the conversation is marked
+    // as user-named, not because a dblclick expanded it. The assertion below
+    // (cut to 32 chars with a literal "..." suffix) is unchanged.
     it('should truncate expanded title labels with a literal ellipsis suffix', () => {
       const containerEl = createMockEl();
       const callbacks = createMockCallbacks();
       const tabBar = new TabBar(containerEl, callbacks);
       const title = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
-      tabBar.update([createTabBarItem({ title })]);
-      containerEl._children[0].dispatchEvent('dblclick', {
-        preventDefault: jest.fn(),
-        stopPropagation: jest.fn(),
-      });
+      tabBar.setUserNamedConversationIds(['conv-1']);
+      tabBar.update([createTabBarItem({ conversationId: 'conv-1', title })]);
 
       expect(containerEl._children[0].textContent).toBe('ABCDEFGHIJKLMNOPQRSTUVWXYZ012...');
       expect(containerEl._children[0].textContent.endsWith('...')).toBe(true);
     });
 
-    it('should keep expanded title state across tab bar updates', () => {
-      const containerEl = createMockEl();
-      const callbacks = createMockCallbacks();
-      const tabBar = new TabBar(containerEl, callbacks);
-
-      tabBar.update([createTabBarItem({ id: 'tab-1', index: 1, title: 'First Title' })]);
-      containerEl._children[0].dispatchEvent('dblclick', {
-        preventDefault: jest.fn(),
-        stopPropagation: jest.fn(),
-      });
-
-      tabBar.update([createTabBarItem({ id: 'tab-1', index: 1, title: 'Renamed Title' })]);
-
-      expect(containerEl._children[0].textContent).toBe('Renamed Title');
-      expect(containerEl._children[0].hasClass('claudian-tab-badge-expanded')).toBe(true);
-    });
+    // mazel: upstream's "should keep expanded title state across tab bar
+    // updates" test is deleted. It drove the expansion through a dblclick, and
+    // that gesture no longer expands anything.
 
     it('should preserve horizontal scroll position across tab bar updates', () => {
       const containerEl = createMockEl();
@@ -319,17 +271,29 @@ describe('TabBar', () => {
   });
 
   describe('badge interactions', () => {
+    // mazel: the tab switch is held back by SINGLE_CLICK_DELAY_MS (220 ms) so
+    // that a dblclick can cancel it. Without the delay every rename would first
+    // switch tabs. The click still switches — it just arrives one tick later.
     it('should call onTabClick when badge is clicked', () => {
-      const containerEl = createMockEl();
-      const callbacks = createMockCallbacks();
-      const tabBar = new TabBar(containerEl, callbacks);
+      jest.useFakeTimers();
+      try {
+        const containerEl = createMockEl();
+        const callbacks = createMockCallbacks();
+        const tabBar = new TabBar(containerEl, callbacks);
 
-      tabBar.update([createTabBarItem({ id: 'clicked-tab' })]);
+        tabBar.update([createTabBarItem({ id: 'clicked-tab' })]);
 
-      // Simulate click
-      containerEl._children[0].dispatchEvent('click');
+        // Simulate click
+        containerEl._children[0].dispatchEvent('click');
 
-      expect(callbacks.onTabClick).toHaveBeenCalledWith('clicked-tab');
+        expect(callbacks.onTabClick).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(220);
+
+        expect(callbacks.onTabClick).toHaveBeenCalledWith('clicked-tab');
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('should call onTabClose on right-click when canClose is true', () => {

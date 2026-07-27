@@ -108,6 +108,23 @@ def check_task_reducer(bundle: str) -> tuple[str, bool, str]:
     return ok("task reducer", "alle vier Task-Tools + deleted-Zweig vorhanden")
 
 
+def check_tab_rename(bundle: str) -> tuple[str, bool, str]:
+    # CSS class names are string literals and survive minification intact.
+    if '"claudian-tab-badge-renaming"' not in bundle and "'claudian-tab-badge-renaming'" not in bundle:
+        return fail("tab rename", "Rename-Zustandsklasse fehlt im Bundle")
+    if "plaintext-only" not in bundle:
+        return fail("tab rename", "contenteditable-Editor fehlt")
+    # The rename gesture is the PLAIN dblclick since 2026-07-27 (Gabriel).
+    # Upstream's toggleBadgeTitle was dropped on purpose, so its absence is the
+    # expected state — asserting it is still there would now be backwards.
+    if "toggleBadgeTitle" in bundle:
+        return fail("tab rename", "toggleBadgeTitle wieder im Bundle — der einfache Doppelklick ist wieder belegt")
+    # The user-named marker is a persisted object key and survives minification.
+    if "userNamedConversationIds" not in bundle:
+        return fail("tab rename", "Merker fuer benannte Gespraeche fehlt — Badges zeigen nur Nummern")
+    return ok("tab rename", "dblclick-Editor da, Upstream-Toggle entfernt, Merker vorhanden")
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
@@ -132,6 +149,7 @@ def main() -> int:
         check_m2(bundle),
         check_m5(bundle),
         check_task_reducer(bundle),
+        check_tab_rename(bundle),
     ]
 
     failed = 0

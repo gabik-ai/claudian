@@ -576,6 +576,9 @@ export class TabManager implements TabManagerInterface {
       items.push({
         id: tab.id,
         index: index++,
+        // mazel: needed so the tab bar can key a user-given name on the
+        // conversation instead of on the tab.
+        conversationId: tab.conversationId,
         title: getTabTitle(tab, this.plugin),
         providerId: getTabProviderId(tab, this.plugin),
         isActive: tab.id === this.activeTabId,

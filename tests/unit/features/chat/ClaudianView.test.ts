@@ -340,6 +340,11 @@ describe('ClaudianView tab controls', () => {
     };
     view.tabBar = {
       getExpandedTitleTabIds: jest.fn().mockReturnValue(['tab-2', 'closed-tab']),
+      // mazel: 'conv-gone' belongs to a conversation whose tab is closed. It
+      // must survive the snapshot, unlike the expanded-title state above: a
+      // user-given name has to outlive its tab, otherwise closing the tab
+      // erases exactly the label needed to find the conversation again.
+      getUserNamedConversationIds: jest.fn().mockReturnValue(['conv-2', 'conv-gone']),
     };
 
     expect(view.getPersistedTabState()).toEqual({
@@ -349,6 +354,7 @@ describe('ClaudianView tab controls', () => {
       ],
       activeTabId: 'tab-2',
       expandedTitleTabIds: ['tab-2'],
+      userNamedConversationIds: ['conv-2', 'conv-gone'],
     });
   });
 
@@ -357,6 +363,7 @@ describe('ClaudianView tab controls', () => {
       openTabs: [{ tabId: 'tab-1', conversationId: null }],
       activeTabId: 'tab-1',
       expandedTitleTabIds: ['tab-1'],
+      userNamedConversationIds: ['conv-1'],
     };
     const view = Object.create(ClaudianView.prototype) as any;
 
@@ -371,6 +378,7 @@ describe('ClaudianView tab controls', () => {
     };
     view.tabBar = {
       setExpandedTitleTabIds: jest.fn(),
+      setUserNamedConversationIds: jest.fn(),
     };
     view.updateTabBar = jest.fn();
 
@@ -378,6 +386,9 @@ describe('ClaudianView tab controls', () => {
 
     expect(view.tabManager.restoreState).toHaveBeenCalledWith(persistedState);
     expect(view.tabBar.setExpandedTitleTabIds).toHaveBeenCalledWith(['tab-1']);
+    // mazel: without this the badge falls back to its number after a restart
+    // while the conversation keeps the name — the two would disagree.
+    expect(view.tabBar.setUserNamedConversationIds).toHaveBeenCalledWith(['conv-1']);
     expect(view.updateTabBar).toHaveBeenCalledTimes(1);
     expect(view.tabManager.createTab).not.toHaveBeenCalled();
   });

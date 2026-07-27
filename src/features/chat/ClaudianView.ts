@@ -332,6 +332,23 @@ export class ClaudianView extends ItemView {
         void this.createNewTab().catch(() => new Notice('Failed to create tab'));
       },
       onTitleExpansionChanged: () => this.persistTabState(),
+      // mazel: the tab title lives on its conversation, so an inline rename
+      // maps straight onto renameConversation(). A blank tab has no
+      // conversation yet and is simply skipped.
+      onTabRename: (tabId, title) => {
+        const tab = this.tabManager?.getTab(tabId);
+        if (!tab?.conversationId) return;
+        void this.plugin.renameConversation(tab.conversationId, title)
+          .then(() => {
+            this.updateTabBar();
+            this.updateHistoryDropdown();
+          })
+          .catch(() => new Notice('Failed to rename tab'));
+      },
+      // mazel: the marker "this conversation carries a name the user chose" is
+      // what makes the badge show the name instead of its number, so it has to
+      // be written out as soon as it changes.
+      onUserNamedConversationsChanged: () => this.persistTabState(),
     });
 
     const navActionsEl = wrapper.createDiv({ cls: 'claudian-input-nav-actions' });
@@ -769,6 +786,9 @@ export class ClaudianView extends ItemView {
         StartupProfiler.recordCount('restored-tab-count', persistedState.openTabs.length);
         await StartupProfiler.runAsync('tab-restore-internal', () => this.tabManager!.restoreState(persistedState));
         this.tabBar?.setExpandedTitleTabIds(persistedState.expandedTitleTabIds ?? []);
+        // mazel: restore the names the user gave, so a renamed tab still shows
+        // its name after a restart instead of falling back to its number.
+        this.tabBar?.setUserNamedConversationIds(persistedState.userNamedConversationIds ?? []);
         this.updateTabBar();
         return;
       }
@@ -802,9 +822,15 @@ export class ClaudianView extends ItemView {
     const expandedTitleTabIds = (this.tabBar?.getExpandedTitleTabIds() ?? [])
       .filter(tabId => openTabIds.has(tabId));
 
+    // mazel: NOT filtered against the open tabs, unlike expandedTitleTabIds
+    // above. A name has to outlive its tab, otherwise closing the tab erases
+    // exactly the label the user needs to find the conversation again.
+    const userNamedConversationIds = this.tabBar?.getUserNamedConversationIds() ?? [];
+
     return {
       ...state,
       ...(expandedTitleTabIds.length > 0 ? { expandedTitleTabIds } : {}),
+      ...(userNamedConversationIds.length > 0 ? { userNamedConversationIds } : {}),
     };
   }
 

@@ -115,6 +115,8 @@ export interface AppTabManagerState {
   openTabs: Array<{ tabId: string; conversationId: string | null; draftModel?: string | null }>;
   activeTabId: string | null;
   expandedTitleTabIds?: string[];
+  /** mazel: conversations the user named by hand. Survives closing the tab. */
+  userNamedConversationIds?: string[];
 }
 
 /** Provider-neutral session metadata storage. */
