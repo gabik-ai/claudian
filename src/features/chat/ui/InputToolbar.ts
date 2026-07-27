@@ -1259,8 +1259,16 @@ export class ContextUsageMeter {
   }
 
   private formatTokens(tokens: number): string {
+    // mazel: 1M context windows must read as "1M", not "1000k".
+    if (tokens >= 1_000_000) {
+      const millions = tokens / 1_000_000;
+      const rounded = millions >= 10 ? Math.round(millions) : Math.round(millions * 10) / 10;
+      return `${rounded}M`;
+    }
     if (tokens >= 1000) {
-      return `${Math.round(tokens / 1000)}k`;
+      const thousands = Math.round(tokens / 1000);
+      // 999_999 rounds to 1000k — promote instead of printing a four-digit k.
+      return thousands >= 1000 ? '1M' : `${thousands}k`;
     }
     return String(tokens);
   }
