@@ -207,6 +207,54 @@
     return { ok: wrong.length === 0, checked, ...(wrong.length ? { wrong } : {}) };
   });
 
+  check('send/stop glyph is filled, not outlined', () => {
+    // Obsidian's global `.svg-icon` ships lucide as fill:none + stroke, so this
+    // is a standing override, not a one-off style. If the global wins again the
+    // glyphs silently become hairline outlines: still present, still the right
+    // colour, and illegible at 15px. Nothing else would report that.
+    const bad = [];
+    let checked = 0;
+    document.querySelectorAll('.claudian-send-stop-btn').forEach((btn, i) => {
+      const svg = btn.querySelector('svg');
+      if (!svg) { bad.push({ i, error: 'no glyph' }); return; }
+      checked += 1;
+      const cs = getComputedStyle(svg);
+      if (cs.fill === 'none' || cs.stroke !== 'none') bad.push({ i, fill: cs.fill, stroke: cs.stroke });
+    });
+    if (!checked) return { ok: false, error: 'no send/stop glyph found' };
+    return { ok: bad.length === 0, checked, ...(bad.length ? { bad } : {}) };
+  });
+
+  check('send/stop and the permission chip share ONE corner inset', () => {
+    // Gabriel's rule on 2026-07-27: the gap the YOLO chip already had below it
+    // becomes the single inset for the whole corner — chip right and bottom,
+    // button right and top. Four numbers, one value. They come from three
+    // different CSS rules in two different files, so nothing but an assertion
+    // keeps them equal; the button's is an absolute offset resolved against the
+    // padding box while the chip's is toolbar padding against the border box,
+    // which is exactly why the raw declarations differ (8px vs 2px) and the
+    // rendered result must not.
+    const wrap = [...document.querySelectorAll('.claudian-input-wrapper')]
+      .find((w) => w.getBoundingClientRect().width > 0);
+    if (!wrap) return { ok: false, error: 'no visible composer' };
+    const btn = wrap.querySelector('.claudian-send-stop-btn');
+    const chip = [...document.querySelectorAll('.claudian-mode-button')]
+      .find((c) => c.getBoundingClientRect().width > 0);
+    if (!btn) return { ok: false, error: 'no send/stop button in the visible composer' };
+    if (!chip) return { ok: true, skipped: 'no visible permission chip (ui-fixes Fix 2 inactive)' };
+    const wr = wrap.getBoundingClientRect();
+    const br = btn.getBoundingClientRect();
+    const cr = chip.getBoundingClientRect();
+    const gaps = {
+      buttonRight: Math.round(wr.right - br.right),
+      buttonTop: Math.round(br.top - wr.top),
+      chipRight: Math.round(wr.right - cr.right),
+      chipBottom: Math.round(wr.bottom - cr.bottom),
+    };
+    const distinct = [...new Set(Object.values(gaps))];
+    return { ok: distinct.length === 1, gaps, ...(distinct.length > 1 ? { distinct } : {}) };
+  });
+
   check('tab badge shows its NUMBER unless the user named it', () => {
     // Since 2026-07-27 plain dblclick renames; upstream's expand/collapse toggle
     // is gone. An unnamed badge must therefore read as a plain number. If this

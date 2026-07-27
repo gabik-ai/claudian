@@ -207,7 +207,18 @@ def check_send_stop(bundle: str, plugin_dir: str) -> tuple[str, bool, str]:
     if "top:" not in idle_block or "bottom:" in idle_block:
         return fail("send/stop button", "Knopf sitzt nicht oben (top fehlt oder bottom zurueck)")
 
-    return ok("send/stop button", "Zustaende, Icon-Paar, Farb-Umkehrung, Position oben")
+    # Gefuellte Symbole. Obsidians globales `.svg-icon` setzt fill:none +
+    # stroke, also ist das ein Dauer-Override: faellt er weg, werden Dreieck und
+    # Quadrat zu Haarlinien-Umrissen und sind bei 15px nicht unterscheidbar.
+    glyph_block = block(".claudian-send-stop-btn .svg-icon {")
+    if glyph_block is None:
+        return fail("send/stop button", "Symbol-Regel fehlt in styles.css")
+    if "fill: currentColor" not in glyph_block:
+        return fail("send/stop button", "Symbol nicht gefuellt — Obsidians fill:none gewinnt wieder")
+    if "stroke: none" not in glyph_block:
+        return fail("send/stop button", "stroke nicht geloescht — Umriss sitzt auf der Fuellung")
+
+    return ok("send/stop button", "Zustaende, Icon-Paar, Farb-Umkehrung, Position, Fuellung")
 
 
 def main() -> int:

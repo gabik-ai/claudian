@@ -5,7 +5,13 @@
   gap: 6px;
   margin-left: auto;
   padding-left: 12px;
-  padding-right: 8px;
+  /* 2px, not 8px. The toolbar already leaves 6px plus the wrapper's 1px border,
+     so 2px here puts the YOLO chip 9px from the box edge — the same 9px it
+     already sits above the bottom edge, and the same inset the send/stop button
+     uses top and right. One measure for all three gaps, so the corner reads as
+     deliberate instead of as three different paddings that happen to be close.
+     Derived by measurement on 2026-07-27, not chosen: chip was at 15px. */
+  padding-right: 2px;
 }
 
 .claudian-permission-label {

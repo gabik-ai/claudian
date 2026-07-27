@@ -240,13 +240,13 @@
   /* Top-right of the box. It used to sit bottom-right, where it landed on top
      of the permission toggle — measured 9px from the wrapper edge against the
      YOLO chip's 15px, so the two overlapped instead of lining up.
-     14px, not 15px, and the difference is not a fudge: the wrapper carries a
-     1px border, an absolutely positioned offset resolves against the PADDING
-     box, and the YOLO chip is in normal flow inside the BORDER box. right:15px
-     therefore measures 16px from the same edge the chip measures 15px from.
-     14 + 1px border = the 15px the eye compares against. Re-derive this if the
-     wrapper's border-width ever changes. */
-  right: 14px;
+     8px renders as 9px: the wrapper carries a 1px border, an absolutely
+     positioned offset resolves against the PADDING box, while the YOLO chip is
+     in normal flow inside the BORDER box. 9px is the single inset shared by
+     this button (top and right) and the YOLO chip (bottom and right), taken
+     from the gap the chip already had below it. Re-derive if the wrapper's
+     border-width changes. */
+  right: 8px;
   top: 8px;
   display: flex;
   align-items: center;
@@ -274,6 +274,15 @@
 .claudian-send-stop-btn .svg-icon {
   width: 15px;
   height: 15px;
+  /* Solid, not outlined. Obsidian's global `.svg-icon` ships lucide as
+     `fill: none; stroke: currentColor`, which drew the play triangle and the
+     stop square as hairline outlines — at 15px an outline reads as a smudge and
+     the two glyphs stop being distinguishable at a glance. Filled, they are
+     unmistakable silhouettes. Specificity (0,2,0) beats the global (0,1,0);
+     stroke must be cleared too or the 1.75px outline sits on the fill and
+     fattens the shape. */
+  fill: currentColor;
+  stroke: none;
 }
 
 /* Stop state reads as "interrupt", not as a second send. Brand orange with a
