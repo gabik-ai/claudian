@@ -25,6 +25,7 @@ import {
 import { filterValidPaths, findConflictingPath, isDuplicatePath, isValidDirectoryPath, validateDirectoryPath } from '../../../utils/externalContext';
 import { expandHomePath, normalizePathForFilesystem } from '../../../utils/path';
 import { toggleServiceTier } from '../actions/toggleServiceTier';
+import { PermissionModeButton } from './PermissionModeButton';
 
 interface ElectronOpenDialogResult {
   canceled: boolean;
@@ -63,6 +64,18 @@ export interface ToolbarCallbacks {
   getEnvironmentVariables?: () => string;
   getUIConfig: () => ProviderChatUIConfig;
   getCapabilities: () => ProviderCapabilities;
+  /**
+   * mazel: the permission mode of THIS tab, not the provider-wide one.
+   *
+   * Optional on purpose. `getSettings().permissionMode` returns the provider
+   * snapshot, which every tab shares — reading it is what made the upstream
+   * toggle global, so flipping tab 1 to Safe flipped tabs 2 and 3 with it. A
+   * host that can answer per tab supplies this; one that cannot keeps the old
+   * shared behaviour instead of rendering nothing. Making it required would
+   * force every existing caller and every test fixture to grow a field just to
+   * repeat the fallback.
+   */
+  getPermissionMode?: () => string;
 }
 
 export class ModelSelector {
@@ -404,10 +417,19 @@ export class ThinkingBudgetSelector {
   }
 }
 
+/**
+ * mazel: the shell around the permission chip.
+ *
+ * Upstream renders a label plus a two-state slider in here. That slider could
+ * only ever reach Safe and YOLO; PLAN had a label and no gesture. The shell
+ * stays, its contents are now a `PermissionModeButton` that cycles all three.
+ * Keeping the shell matters: `.claudian-permission-toggle` carries the corner
+ * inset that the send/stop button is measured against, and every caller in
+ * Tab.ts already holds this object and calls `updateDisplay()` on it.
+ */
 export class PermissionToggle {
   private container: HTMLElement;
-  private toggleEl: HTMLElement | null = null;
-  private labelEl: HTMLElement | null = null;
+  private modeButton: PermissionModeButton | null = null;
   private callbacks: ToolbarCallbacks;
   private visible = true;
 
@@ -425,14 +447,29 @@ export class PermissionToggle {
   private render() {
     this.container.empty();
 
-    this.labelEl = this.container.createSpan({ cls: 'claudian-permission-label' });
-    this.toggleEl = this.container.createDiv({ cls: 'claudian-toggle-switch' });
+    this.modeButton = new PermissionModeButton(this.container, {
+      getMode: () => this.getCurrentMode(),
+      getToggleConfig: () => this.getToggleConfig(),
+      supportsPlanMode: () => this.callbacks.getCapabilities().supportsPlanMode,
+      onModeChange: async (mode: string) => {
+        await this.callbacks.onPermissionModeChange(mode);
+      },
+    });
 
     this.updateDisplay();
+  }
 
-    this.toggleEl.addEventListener('click', () => {
-      runToolbarAction(() => this.toggle(), 'Failed to change permission mode');
-    });
+  /**
+   * The tab's own mode, falling back to the provider-wide one.
+   *
+   * The fallback is not decoration: `getSettings()` returns the PROVIDER
+   * snapshot, which is shared by every tab. Reading it directly is what made
+   * the upstream slider global. A host that supplies `getPermissionMode` gets a
+   * per-tab chip; one that does not keeps the old, shared behaviour rather than
+   * showing nothing.
+   */
+  private getCurrentMode(): string {
+    return this.callbacks.getPermissionMode?.() ?? this.callbacks.getSettings().permissionMode;
   }
 
   private getToggleConfig(): ProviderPermissionModeToggleConfig | null {
@@ -441,48 +478,21 @@ export class PermissionToggle {
   }
 
   updateDisplay() {
-    if (!this.toggleEl || !this.labelEl) return;
+    if (!this.modeButton) return;
 
     const toggleConfig = this.getToggleConfig();
-    const capabilities = this.callbacks.getCapabilities();
     if (!this.visible || !toggleConfig) {
       this.container.addClass('claudian-hidden');
       return;
     }
 
     this.container.removeClass('claudian-hidden');
-    const mode = this.callbacks.getSettings().permissionMode;
-    const planValue = toggleConfig.planValue;
-    const planLabel = toggleConfig.planLabel ?? 'PLAN';
-    const canShowPlan = Boolean(planValue) && capabilities.supportsPlanMode;
-
-    if (canShowPlan && planValue && mode === planValue) {
-      this.toggleEl.addClass('claudian-hidden');
-      this.labelEl.setText(planLabel);
-      this.labelEl.addClass('plan-active');
-    } else {
-      this.toggleEl.removeClass('claudian-hidden');
-      this.labelEl.removeClass('plan-active');
-      if (mode === toggleConfig.activeValue) {
-        this.toggleEl.addClass('active');
-        this.labelEl.setText(toggleConfig.activeLabel);
-      } else {
-        this.toggleEl.removeClass('active');
-        this.labelEl.setText(toggleConfig.inactiveLabel);
-      }
-    }
+    this.modeButton.updateDisplay();
   }
 
-  private async toggle() {
-    const toggleConfig = this.getToggleConfig();
-    if (!toggleConfig) return;
-
-    const current = this.callbacks.getSettings().permissionMode;
-    const newMode = current === toggleConfig.activeValue
-      ? toggleConfig.inactiveValue
-      : toggleConfig.activeValue;
-    await this.callbacks.onPermissionModeChange(newMode);
-    this.updateDisplay();
+  destroy(): void {
+    this.modeButton?.destroy();
+    this.modeButton = null;
   }
 }
 

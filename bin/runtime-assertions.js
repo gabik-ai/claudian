@@ -255,6 +255,33 @@
     return { ok: distinct.length === 1, gaps, ...(distinct.length > 1 ? { distinct } : {}) };
   });
 
+  check('permission chip is native, not injected from the vault', () => {
+    // Der Chip hing bis 2026-07-28 in `projects/claudian/ui-fixes.js` Fix 2 und
+    // wurde von einem MutationObserver im Eval-Plugin bei jeder DOM-Aenderung
+    // neu eingesetzt. Diese Pruefung ist der Beleg, dass er jetzt aus dem Bundle
+    // kommt: sie verlangt Marker, die die Injektion nie gesetzt hat
+    // (`data-permission-mode`, `role=button`). Faellt sie aus, ist entweder der
+    // Patch weg oder jemand hat die Injektion wiederbelebt.
+    const chips = [...document.querySelectorAll('.claudian-mode-button')];
+    if (!chips.length) return { ok: false, error: 'kein Berechtigungs-Chip im DOM' };
+    const bad = [];
+    chips.forEach((chip, i) => {
+      const mode = chip.getAttribute('data-permission-mode');
+      if (!mode) bad.push({ i, error: 'kein data-permission-mode — sieht nach der alten Injektion aus' });
+      if (chip.getAttribute('role') !== 'button') bad.push({ i, error: 'nicht per Tastatur erreichbar' });
+      const hasState = ['mode-safe', 'mode-yolo', 'mode-plan'].some(c => chip.classList.contains(c));
+      if (!hasState) bad.push({ i, error: 'keine Zustandsklasse', classes: [...chip.classList] });
+    });
+    // Der Upstream-Schieber darf nicht NEBEN dem Chip stehen: zwei
+    // Bedienelemente auf demselben Zustand ist genau der Doppel-Knopf-Fehler von
+    // der Composer-Leiste. Bewusst auf `.claudian-permission-toggle` begrenzt —
+    // dieselbe Klasse gehoert auch dem ModeSelector (Build/Plan), der bleiben
+    // soll. Ungescopt war diese Pruefung falsch-rot.
+    const sliders = document.querySelectorAll('.claudian-permission-toggle .claudian-toggle-switch').length;
+    if (sliders) bad.push({ error: `${sliders}x Upstream-Schieber neben dem Chip` });
+    return { ok: bad.length === 0, chips: chips.length, ...(bad.length ? { bad } : {}) };
+  });
+
   check('no tab badge is cropped by the strip it sits in', () => {
     // The strip needs `overflow-y: hidden` (its sibling axis scrolls, and the
     // CSS spec turns a `visible` cross-axis into `auto`, which would hang a

@@ -650,12 +650,37 @@ describe('PermissionToggle', () => {
     expect(container).not.toBeNull();
   });
 
-  it('should display Safe label when in normal mode', () => {
-    const label = parentEl.querySelector('.claudian-permission-label');
-    expect(label?.textContent).toBe('Safe');
+  /*
+   * mazel, 2026-07-28: die sieben Tests dieses Blocks pruefen jetzt den
+   * Drei-Zustands-Chip statt des Upstream-Schiebers.
+   *
+   * Upstream rendert `.claudian-permission-label` plus `.claudian-toggle-switch`
+   * und kann damit genau zwei Zustaende erreichen, Safe und YOLO. PLAN hat dort
+   * eine Beschriftung, aber keine Geste: sichtbar und nicht auswaehlbar. Beide
+   * erreichbaren Zustaende galten ausserdem PROVIDER-weit — Tab 1 auf Safe zu
+   * stellen stellte Tab 2 und 3 stillschweigend mit um.
+   *
+   * Ersetzt durch `.claudian-mode-button`, der Safe -> YOLO -> Plan durchlaeuft
+   * und den Modus pro Tab liest. Das Verhalten stammt aus der Laufzeit-Injektion
+   * `projects/claudian/ui-fixes.js` Fix 2 v5 im Vault, die genau deshalb
+   * existierte. Sie wird mit diesem Patch geloescht.
+   */
+  it('renders the three-state chip, not the upstream slider', () => {
+    expect(parentEl.querySelector('.claudian-mode-button')).not.toBeNull();
+    expect(parentEl.querySelector('.claudian-toggle-switch')).toBeNull();
   });
 
-  it('should display YOLO label when in yolo mode', () => {
+  it('shows Safe and carries the mode on the element in normal mode', () => {
+    const chip = parentEl.querySelector('.claudian-mode-button');
+    expect(chip?.textContent).toBe('Safe');
+    // Der Modus steht zusaetzlich als Attribut da, damit eine Laufzeit-Pruefung
+    // nicht raten muss, welche provider-eigene Beschriftung welchen Modus meint.
+    expect(chip?.getAttribute('data-permission-mode')).toBe('normal');
+    expect(chip?.hasClass('mode-safe')).toBe(true);
+    expect(chip?.hasClass('mode-yolo')).toBe(false);
+  });
+
+  it('shows YOLO and the yolo state class when in yolo mode', () => {
     callbacks.getSettings.mockReturnValue({
       model: 'sonnet',
       thinkingBudget: 'low',
@@ -667,11 +692,14 @@ describe('PermissionToggle', () => {
     const parentEl2 = createMockEl();
     new PermissionToggle(parentEl2, callbacks);
 
-    const label = parentEl2.querySelector('.claudian-permission-label');
-    expect(label?.textContent).toBe('YOLO');
+    const chip = parentEl2.querySelector('.claudian-mode-button');
+    expect(chip?.textContent).toBe('YOLO');
+    expect(chip?.hasClass('mode-yolo')).toBe(true);
   });
 
-  it('should show PLAN label and hide toggle in plan mode', () => {
+  it('shows PLAN as a normal, reachable state — not a dead label', () => {
+    // Der Unterschied zu upstream in einem Test: dort war PLAN eine Sackgasse,
+    // die den Schieber ausblendete. Hier ist es der dritte Halt im Kreis.
     callbacks.getSettings.mockReturnValue({
       model: 'sonnet',
       thinkingBudget: 'low',
@@ -683,40 +711,25 @@ describe('PermissionToggle', () => {
     const parentEl2 = createMockEl();
     new PermissionToggle(parentEl2, callbacks);
 
-    const label = parentEl2.querySelector('.claudian-permission-label');
-    expect(label?.textContent).toBe('PLAN');
-    expect(label?.hasClass('plan-active')).toBe(true);
-
-    const toggle = parentEl2.querySelector('.claudian-toggle-switch');
-    expect(toggle?.style.display).toBe('none');
+    const chip = parentEl2.querySelector('.claudian-mode-button');
+    expect(chip?.hasClass('mode-plan')).toBe(true);
+    expect(chip?.getAttribute('data-permission-mode')).toBe('plan');
+    expect(chip?.style.display).not.toBe('none');
   });
 
-  it('should add active class when in yolo mode', () => {
-    callbacks.getSettings.mockReturnValue({
-      model: 'sonnet',
-      thinkingBudget: 'low',
-      serviceTier: 'default',
-      permissionMode: 'yolo',
-    });
-    const parentEl2 = createMockEl();
-    new PermissionToggle(parentEl2, callbacks);
-
-    const toggle = parentEl2.querySelector('.claudian-toggle-switch');
-    expect(toggle?.hasClass('active')).toBe(true);
-  });
-
-  it('should not have active class in normal mode', () => {
-    const toggle = parentEl.querySelector('.claudian-toggle-switch');
-    expect(toggle?.hasClass('active')).toBe(false);
-  });
-
-  it('should toggle from normal to yolo on click', async () => {
-    const toggle = parentEl.querySelector('.claudian-toggle-switch');
-    await toggle?.dispatchEvent('click');
+  it('cycles normal to yolo on click', async () => {
+    const chip = parentEl.querySelector('.claudian-mode-button');
+    // Mit Ereignis-Objekt, nicht ohne: der Chip ruft preventDefault und
+    // stopPropagation, damit ein Klick nicht durch die Toolbar nach oben blubbert
+    // und dort einen Tabwechsel ausloest. Ein Test, der das Ereignis weglaesst,
+    // pruefte einen Handler, den es so nie gibt.
+    await chip?.dispatchEvent('click', { preventDefault: jest.fn(), stopPropagation: jest.fn() });
     expect(callbacks.onPermissionModeChange).toHaveBeenCalledWith('yolo');
   });
 
-  it('should toggle from yolo to normal on click', async () => {
+  it('cycles yolo to plan on click, instead of falling back to normal', async () => {
+    // Beim Schieber war das der Rueckweg nach Safe. Beim Chip ist es der Weg
+    // nach vorn, sonst waere Plan wieder unerreichbar.
     callbacks.getSettings.mockReturnValue({
       model: 'sonnet',
       thinkingBudget: 'low',
@@ -725,9 +738,27 @@ describe('PermissionToggle', () => {
     const parentEl2 = createMockEl();
     new PermissionToggle(parentEl2, callbacks);
 
-    const toggle = parentEl2.querySelector('.claudian-toggle-switch');
-    await toggle?.dispatchEvent('click');
-    expect(callbacks.onPermissionModeChange).toHaveBeenCalledWith('normal');
+    const chip = parentEl2.querySelector('.claudian-mode-button');
+    await chip?.dispatchEvent('click', { preventDefault: jest.fn(), stopPropagation: jest.fn() });
+    expect(callbacks.onPermissionModeChange).toHaveBeenCalledWith('plan');
+  });
+
+  it('reads the mode PER TAB when the host can answer, not the shared snapshot', () => {
+    // Der eigentliche Grund fuer die Portierung. getSettings() liefert die
+    // Provider-Momentaufnahme, die alle Tabs teilen. Nur wenn getPermissionMode
+    // Vorrang hat, kann Tab 1 auf Safe stehen waehrend Tab 2 auf YOLO steht.
+    callbacks.getSettings.mockReturnValue({
+      model: 'sonnet',
+      thinkingBudget: 'low',
+      permissionMode: 'normal',
+    });
+    const perTab = { ...callbacks, getPermissionMode: jest.fn().mockReturnValue('yolo') };
+    const parentEl2 = createMockEl();
+    new PermissionToggle(parentEl2, perTab as unknown as typeof callbacks);
+
+    const chip = parentEl2.querySelector('.claudian-mode-button');
+    expect(chip?.getAttribute('data-permission-mode')).toBe('yolo');
+    expect(perTab.getPermissionMode).toHaveBeenCalled();
   });
 
   it('should hide the control when provider exposes no permission toggle UI', () => {

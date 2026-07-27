@@ -151,6 +151,29 @@ def check_attention_trigger(bundle: str) -> tuple[str, bool, str]:
     return ok("attention trigger", "Ausloeser und Zustandsklasse im Bundle")
 
 
+def check_permission_chip(bundle: str) -> tuple[str, bool, str]:
+    """Der Drei-Zustands-Chip fuer den Berechtigungsmodus (ex ui-fixes.js Fix 2).
+
+    Geprueft wird die Klasse UND der Kreis. Nur die Klasse zu pruefen liesse
+    einen Chip durch, der zwar da ist, aber wieder nur zwei Zustaende kennt —
+    und genau das ist der Upstream-Zustand, aus dem wir kommen.
+    """
+    if '"claudian-mode-button"' not in bundle and "'claudian-mode-button'" not in bundle:
+        return fail("permission chip", "Chip-Klasse fehlt — Schalter waere weg")
+    if "mode-plan" not in bundle:
+        return fail("permission chip", "Plan-Zustand fehlt — zurueck beim Zwei-Zustands-Schieber")
+    if "data-permission-mode" not in bundle:
+        return fail("permission chip", "Modus-Attribut fehlt — Laufzeit-Pruefung koennte nichts lesen")
+    # Hier stand die Pruefung "der Schieber darf nicht mehr im Bundle sein".
+    # Sie war beim ersten Lauf rot, und zwar zu Recht: `claudian-toggle-switch`
+    # gehoert auch dem ModeSelector (Build/Plan), einem voellig anderen
+    # Bedienelement, das bleiben soll. Im minifizierten Bundle laesst sich nicht
+    # unterscheiden, welche Komponente die Klasse setzt. Die Abwesenheit des
+    # Schiebers NEBEN dem Chip prueft deshalb die Laufzeit-Zusicherung
+    # "permission chip is native", die im echten DOM nachsehen kann.
+    return ok("permission chip", "Chip, Plan-Zustand und Modus-Attribut im Bundle")
+
+
 def check_send_stop(bundle: str, plugin_dir: str) -> tuple[str, bool, str]:
     if '"claudian-send-stop-btn"' not in bundle and "'claudian-send-stop-btn'" not in bundle:
         return fail("send/stop button", "Button-Klasse fehlt im Bundle")
@@ -249,6 +272,7 @@ def main() -> int:
         check_tab_drag(bundle),
         check_attention_trigger(bundle),
         check_send_stop(bundle, plugin_dir),
+        check_permission_chip(bundle),
     ]
 
     failed = 0
