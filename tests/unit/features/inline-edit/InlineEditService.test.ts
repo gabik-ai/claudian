@@ -761,7 +761,9 @@ describe('InlineEditService', () => {
       const hook = createReadOnlyHook();
       const result = await callHook(hook.hooks[0], { tool_name: 'Write', tool_input: { file_path: 'test.md' } });
 
-      expect(result.continue).toBe(false);
+      // mazel: the tool is denied, but the turn keeps running.
+      // See tests/unit/mazel/m5-deny-does-not-end-turn.test.ts
+      expect(result.continue).toBe(true);
       expect(result.hookSpecificOutput.permissionDecision).toBe('deny');
       expect(result.hookSpecificOutput.permissionDecisionReason).toContain('not allowed');
     });
@@ -770,7 +772,8 @@ describe('InlineEditService', () => {
       const hook = createReadOnlyHook();
       const result = await callHook(hook.hooks[0], { tool_name: 'Bash', tool_input: { command: 'rm -rf /' } });
 
-      expect(result.continue).toBe(false);
+      // mazel: denied, turn continues.
+      expect(result.continue).toBe(true);
       expect(result.hookSpecificOutput.permissionDecision).toBe('deny');
     });
 
@@ -778,7 +781,9 @@ describe('InlineEditService', () => {
       const hook = createReadOnlyHook();
       const result = await callHook(hook.hooks[0], { tool_name: 'Edit', tool_input: { file_path: 'test.md' } });
 
-      expect(result.continue).toBe(false);
+      // mazel: denied, turn continues.
+      expect(result.continue).toBe(true);
+      expect(result.hookSpecificOutput.permissionDecision).toBe('deny');
     });
   });
 

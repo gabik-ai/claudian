@@ -34,8 +34,13 @@ export function createReadOnlyHook(): HookCallbackMatcher {
           return { continue: true };
         }
 
+        // mazel: `continue: false` aborts the whole turn, so a single denied
+        // tool call ends the response mid-sentence with no visible reason.
+        // `permissionDecision: 'deny'` already blocks the call; keeping
+        // `continue: true` hands the reason back to the model, which then
+        // picks a read-only path instead of going silent.
         return {
-          continue: false,
+          continue: true,
           hookSpecificOutput: {
             hookEventName: 'PreToolUse' as const,
             permissionDecision: 'deny' as const,
