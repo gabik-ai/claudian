@@ -1374,8 +1374,12 @@ export function createInputToolbar(
   const thinkingBudgetSelector = new ThinkingBudgetSelector(parentEl, callbacks);
   const serviceTierToggle = new ServiceTierToggle(parentEl, callbacks);
   const contextUsageMeter = new ContextUsageMeter(parentEl);
-  const externalContextSelector = new ExternalContextSelector(parentEl, callbacks);
+  // mazel: MCP selector sits before the external-context selector. Both simply
+  // append to parentEl, so construction order IS DOM order — and therefore also
+  // tab order. Swapping here instead of reordering nodes at runtime keeps the
+  // InputToolbarLayoutController's MutationObserver out of the picture.
   const mcpServerSelector = new McpServerSelector(parentEl);
+  const externalContextSelector = new ExternalContextSelector(parentEl, callbacks);
   const permissionToggle = new PermissionToggle(parentEl, callbacks);
   const modeSelector = new ModeSelector(parentEl, callbacks);
   const layoutController = new InputToolbarLayoutController(parentEl);
