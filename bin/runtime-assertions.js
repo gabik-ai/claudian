@@ -54,6 +54,23 @@
     return { ok: !/\b\d{4,}k\b/.test(tooltip), tooltip };
   });
 
+  check('send/stop button present and in a sane state', () => {
+    const btn = document.querySelector('.claudian-send-stop-btn');
+    if (!btn) return { ok: false, error: 'no send/stop button — open a Claudian tab first' };
+    const state = btn.getAttribute('data-state');
+    // Whatever it shows must match reality: a button stuck on "stop" after the
+    // stream ended is worse than no button, because clicking it does nothing.
+    const streaming = Boolean(document.querySelector('.claudian-tab-badge-streaming'));
+    return { ok: state === (streaming ? 'stop' : 'send'), state, streaming };
+  });
+
+  check('tab badges still respond to plain dblclick (upstream toggle intact)', () => {
+    // Our rename sits on Alt+dblclick precisely so this stays upstream's.
+    const badge = document.querySelector('.claudian-tab-badge');
+    if (!badge) return { ok: false, error: 'no tab badge in DOM' };
+    return { ok: badge.hasAttribute('data-title-expanded') };
+  });
+
   check('composer footer mount point exists (companion plugin target)', () => {
     // Upstream 2.0.x moved the header actions into the composer footer. The
     // usage-bar companion plugin mounts here; if this class ever disappears

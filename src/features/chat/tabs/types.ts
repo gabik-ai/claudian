@@ -32,6 +32,7 @@ import type {
 } from '../ui/InputToolbar';
 import type { InstructionModeManager } from '../ui/InstructionModeManager';
 import type { NavigationSidebar } from '../ui/NavigationSidebar';
+import type { SendStopButton } from '../ui/SendStopButton';
 import type { StatusPanel } from '../ui/StatusPanel';
 import type { RuntimeSupervisor } from './RuntimeSupervisor';
 import type { TabSession } from './TabSession';
@@ -143,6 +144,8 @@ export interface TabUIComponents {
   contextUsageMeter: ContextUsageMeter | null;
   statusPanel: StatusPanel | null;
   navigationSidebar: NavigationSidebar | null;
+  /** mazel: explicit send / stop control in the composer. */
+  sendStopButton: SendStopButton | null;
 }
 
 /**

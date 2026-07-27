@@ -222,3 +222,56 @@
 .claudian-input-wrapper.claudian-input-bang-bash-mode .claudian-input {
   font-family: var(--font-monospace);
 }
+
+/* mazel: explicit send / stop control.
+   Upstream has no send button at all — Enter and Escape only, both of which
+   need the textarea focused. This sits at the bottom-right of the composer,
+   always visible and always clickable. */
+.claudian-send-stop-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.claudian-send-stop-btn:hover {
+  background: var(--interactive-accent-hover);
+}
+
+.claudian-send-stop-btn:active {
+  transform: scale(0.94);
+}
+
+.claudian-send-stop-btn .svg-icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* Stop state reads as "interrupt", not as a second send. */
+.claudian-send-stop-btn--streaming {
+  color: var(--text-normal);
+  background: var(--background-modifier-border);
+}
+
+.claudian-send-stop-btn--streaming:hover {
+  background: var(--background-modifier-border-hover);
+}
+
+/* The button is absolutely positioned inside the wrapper, so the wrapper has
+   to be the positioning context and the textarea has to keep clear of it. */
+.claudian-input-wrapper {
+  position: relative;
+}
+
+.claudian-input-wrapper .claudian-input {
+  padding-right: 40px;
+}

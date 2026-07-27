@@ -125,6 +125,14 @@ def check_tab_rename(bundle: str) -> tuple[str, bool, str]:
     return ok("tab rename", "dblclick-Editor da, Upstream-Toggle entfernt, Merker vorhanden")
 
 
+def check_send_stop(bundle: str) -> tuple[str, bool, str]:
+    if '"claudian-send-stop-btn"' not in bundle and "'claudian-send-stop-btn'" not in bundle:
+        return fail("send/stop button", "Button-Klasse fehlt im Bundle")
+    if "Stop generating" not in bundle:
+        return fail("send/stop button", "Stop-Zustand fehlt — Button koennte nur senden")
+    return ok("send/stop button", "beide Zustaende im Bundle")
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
@@ -150,6 +158,7 @@ def main() -> int:
         check_m5(bundle),
         check_task_reducer(bundle),
         check_tab_rename(bundle),
+        check_send_stop(bundle),
     ]
 
     failed = 0

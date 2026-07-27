@@ -54,6 +54,7 @@ import { ImageContextManager } from '../ui/ImageContext';
 import { createInputToolbar } from '../ui/InputToolbar';
 import { InstructionModeManager as InstructionModeManagerClass } from '../ui/InstructionModeManager';
 import { NavigationSidebar } from '../ui/NavigationSidebar';
+import { SendStopButton } from '../ui/SendStopButton';
 import { StatusPanel } from '../ui/StatusPanel';
 import { autoResizeTextarea } from '../ui/textareaResize';
 import { recalculateUsageForModel } from '../utils/usageInfo';
@@ -711,6 +712,7 @@ export function createTab(options: TabCreateOptions): TabData {
       contextUsageMeter: null,
       statusPanel: null,
       navigationSidebar: null,
+      sendStopButton: null,
     },
     dom,
     renderer: null,
@@ -718,6 +720,9 @@ export function createTab(options: TabCreateOptions): TabData {
 
   return tab;
 }
+
+/** mazel: tabs whose streaming callback already forwards to the send/stop button. */
+const tabsWithSendStopSync = new WeakSet<TabData>();
 
 /**
  * Builds the DOM structure for a tab.
@@ -1190,6 +1195,42 @@ function initializeInputToolbar(
   tab.ui.mcpServerSelector = toolbarComponents.mcpServerSelector;
   tab.ui.permissionToggle = toolbarComponents.permissionToggle;
   tab.ui.serviceTierToggle = toolbarComponents.serviceTierToggle;
+
+  // mazel: explicit send / stop control. Lives in the toolbar row rather than
+  // floating over the textarea, so it never covers text the user is typing.
+  // Appended last on purpose — upstream's own test pins the mode selector as
+  // the last child of the toolbar, so the button goes in the wrapper instead.
+  tab.ui.sendStopButton = new SendStopButton(dom.inputWrapper, {
+    onSend: () => {
+      void tab.controllers.inputController?.sendMessage();
+    },
+    onStop: () => {
+      tab.controllers.inputController?.cancelStreaming();
+    },
+  });
+  tab.ui.sendStopButton.setStreaming(tab.state.isStreaming);
+
+  // The button follows ChatState instead of tracking its own idea of "am I
+  // sending". A button with its own flag drifts the moment a stream ends for a
+  // reason the button never hears about (error, abort, tab switch).
+  // Guarded against double-wrapping: nesting the wrapper on a re-init would
+  // fire setStreaming once per layer and leak the old closures.
+  if (!tabsWithSendStopSync.has(tab)) {
+    tabsWithSendStopSync.add(tab);
+    const previousCallbacks = tab.state.callbacks;
+    tab.state.callbacks = {
+      ...previousCallbacks,
+      onStreamingStateChanged: (isStreaming: boolean) => {
+        tab.ui.sendStopButton?.setStreaming(isStreaming);
+        previousCallbacks.onStreamingStateChanged?.(isStreaming);
+      },
+    };
+  }
+
+  dom.eventCleanups.push(() => {
+    tab.ui.sendStopButton?.destroy();
+    tab.ui.sendStopButton = null;
+  });
 
   tab.ui.mcpServerSelector.setMcpManager(getProviderMcpManager(getTabProviderId(tab, plugin)));
 
