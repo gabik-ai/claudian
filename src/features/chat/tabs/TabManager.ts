@@ -217,6 +217,18 @@ export class TabManager implements TabManagerInterface {
         ...(typeof draftModel === 'string' ? { draftModel } : {}),
         defaultProviderId,
         onStreamingChanged: (isStreaming) => {
+          // mazel: raise the attention marker when an answer finishes on a tab
+          // the user is not looking at.
+          //
+          // Upstream ships the whole apparatus for this except the moment that
+          // sets it: the state field, the setter, the callback chain and the
+          // CSS rule all exist, and `needsAttention = true` appears nowhere in
+          // the source. It has been dead since the field was added, which is
+          // why nothing ever went orange. This is the missing line, not a new
+          // feature — and the reason it is a candidate for an upstream PR.
+          if (!isStreaming && tab.id !== this.activeTabId) {
+            tab.state.needsAttention = true;
+          }
           this.callbacks.onTabStreamingChanged?.(tab.id, isStreaming);
         },
         onRewindingChanged: (isRewinding) => {
@@ -298,6 +310,15 @@ export class TabManager implements TabManagerInterface {
     const tab = this.tabs.get(tabId);
     if (!tab) {
       return;
+    }
+
+    // mazel: looking at the tab is what the marker was waiting for, so clear it
+    // here rather than after the switch completes. Deliberately BEFORE the
+    // concurrency guard below: a switch that is merely queued still means the
+    // user has asked for this tab, and leaving the frame up in that case would
+    // make it look stuck.
+    if (tab.state.needsAttention) {
+      tab.state.needsAttention = false;
     }
 
     // Guard against concurrent tab switches

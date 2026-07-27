@@ -125,6 +125,17 @@ def check_tab_rename(bundle: str) -> tuple[str, bool, str]:
     return ok("tab rename", "dblclick-Editor da, Upstream-Toggle entfernt, Merker vorhanden")
 
 
+def check_attention_trigger(bundle: str) -> tuple[str, bool, str]:
+    # Upstream ships the whole apparatus for the finished-answer frame except
+    # the moment that raises it. The assignment is what we add, and minifiers
+    # keep property names on object members, so it survives the build.
+    if "needsAttention=!0" not in bundle and "needsAttention = true" not in bundle:
+        return fail("attention trigger", "Ausloeser fehlt — der Rahmen bliebe tot wie upstream")
+    if '"claudian-tab-badge-attention"' not in bundle and "'claudian-tab-badge-attention'" not in bundle:
+        return fail("attention trigger", "Zustandsklasse fehlt — Rahmen waere unsichtbar")
+    return ok("attention trigger", "Ausloeser und Zustandsklasse im Bundle")
+
+
 def check_send_stop(bundle: str) -> tuple[str, bool, str]:
     if '"claudian-send-stop-btn"' not in bundle and "'claudian-send-stop-btn'" not in bundle:
         return fail("send/stop button", "Button-Klasse fehlt im Bundle")
@@ -158,6 +169,7 @@ def main() -> int:
         check_m5(bundle),
         check_task_reducer(bundle),
         check_tab_rename(bundle),
+        check_attention_trigger(bundle),
         check_send_stop(bundle),
     ]
 

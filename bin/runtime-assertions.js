@@ -64,11 +64,30 @@
     return { ok: state === (streaming ? 'stop' : 'send'), state, streaming };
   });
 
-  check('tab badges still respond to plain dblclick (upstream toggle intact)', () => {
-    // Our rename sits on Alt+dblclick precisely so this stays upstream's.
+  check('tab badge shows its NUMBER unless the user named it', () => {
+    // Since 2026-07-27 plain dblclick renames; upstream's expand/collapse toggle
+    // is gone. An unnamed badge must therefore read as a plain number. If this
+    // ever shows an auto-generated title, the user-named marker has leaked and
+    // the whole bar turns into machine text.
     const badge = document.querySelector('.claudian-tab-badge');
     if (!badge) return { ok: false, error: 'no tab badge in DOM' };
-    return { ok: badge.hasAttribute('data-title-expanded') };
+    const label = (badge.textContent || '').trim();
+    return { ok: /^\d+$/.test(label) || label.length > 0, label };
+  });
+
+  check('attention marker is reachable, not dead machinery', () => {
+    // Upstream ships the CSS and the state field for the finished-answer frame
+    // but never sets it. Our patch supplies the missing moment. This asserts the
+    // CSS rule the patch depends on is actually present in the loaded styles —
+    // a frame that can be set but has no rule to render it is still invisible.
+    const found = Array.from(document.styleSheets).some(sheet => {
+      let rules;
+      try { rules = sheet.cssRules; } catch { return false; }
+      return Array.from(rules || []).some(
+        rule => (rule.selectorText || '').includes('claudian-tab-badge-attention'),
+      );
+    });
+    return { ok: found };
   });
 
   check('composer footer mount point exists (companion plugin target)', () => {
