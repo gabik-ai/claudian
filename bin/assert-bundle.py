@@ -151,12 +151,39 @@ def check_attention_trigger(bundle: str) -> tuple[str, bool, str]:
     return ok("attention trigger", "Ausloeser und Zustandsklasse im Bundle")
 
 
-def check_send_stop(bundle: str) -> tuple[str, bool, str]:
+def check_send_stop(bundle: str, plugin_dir: str) -> tuple[str, bool, str]:
     if '"claudian-send-stop-btn"' not in bundle and "'claudian-send-stop-btn'" not in bundle:
         return fail("send/stop button", "Button-Klasse fehlt im Bundle")
     if "Stop generating" not in bundle:
         return fail("send/stop button", "Stop-Zustand fehlt — Button koennte nur senden")
-    return ok("send/stop button", "beide Zustaende im Bundle")
+    # Icon-Paar: play/square, nicht arrow-up/square. Der Minifier laesst den
+    # ternaeren Ausdruck stehen, deshalb ist das Paar woertlich im Bundle.
+    if '"square":"play"' not in bundle and "'square':'play'" not in bundle:
+        return fail("send/stop button", "Icon-Paar play/square fehlt — Pfeil-Symbol ist zurueck")
+
+    # Die Farblogik lebt in der CSS, nicht im JS-Bundle. Ohne diesen Teil waere
+    # der Check falsch-gruen: die Klasse kann da sein und trotzdem lila leuchten.
+    css_path = os.path.join(plugin_dir, "styles.css")
+    if not os.path.isfile(css_path):
+        return fail("send/stop button", "styles.css fehlt — Farblogik nicht pruefbar")
+    with open(css_path, encoding="utf8") as fh:
+        css = fh.read()
+
+    streaming = css.split(".claudian-send-stop-btn--streaming {", 1)
+    if len(streaming) < 2:
+        return fail("send/stop button", "Streaming-Regel fehlt in styles.css")
+    streaming_block = streaming[1].split("}", 1)[0]
+    if "--claudian-brand" not in streaming_block:
+        return fail("send/stop button", "Streaming ist nicht Marken-Orange — Farblogik verloren")
+
+    idle = css.split("\n.claudian-send-stop-btn {", 1)
+    if len(idle) < 2:
+        return fail("send/stop button", "Ruhe-Regel fehlt in styles.css")
+    idle_block = idle[1].split("}", 1)[0]
+    if "--interactive-accent" in idle_block:
+        return fail("send/stop button", "Ruhezustand wieder auf Accent-Lila — Rueckfall")
+
+    return ok("send/stop button", "beide Zustaende, Icon-Paar und Farblogik")
 
 
 def main() -> int:
@@ -186,7 +213,7 @@ def main() -> int:
         check_tab_rename(bundle),
         check_tab_drag(bundle),
         check_attention_trigger(bundle),
-        check_send_stop(bundle),
+        check_send_stop(bundle, plugin_dir),
     ]
 
     failed = 0

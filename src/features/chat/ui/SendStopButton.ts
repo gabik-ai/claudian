@@ -70,7 +70,11 @@ export class SendStopButton {
     this.buttonEl.toggleClass('claudian-send-stop-btn--streaming', this.streaming);
     this.buttonEl.setAttribute('aria-label', label);
     this.buttonEl.setAttribute('data-state', this.streaming ? 'stop' : 'send');
-    setIcon(this.buttonEl, this.streaming ? 'square' : 'arrow-up');
+    // play/square, not arrow-up/square. The retired full-width button used a
+    // play triangle and Gabriel reads that pair as "run / halt"; an arrow reads
+    // as "submit", which is the same act but a different mental picture. Kept
+    // deliberately in sync with the colours in input.css.
+    setIcon(this.buttonEl, this.streaming ? 'square' : 'play');
   }
 
   destroy(): void {

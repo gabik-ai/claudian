@@ -237,14 +237,19 @@
   width: 26px;
   height: 26px;
   border-radius: 6px;
-  color: var(--text-on-accent);
-  background: var(--interactive-accent);
+  /* Idle reads as "ready", not as a call to action: dark surface, light glyph.
+     The accent purple this used to be competed with the tab badges and the
+     usage bars for the same "look here" signal. Carried over from the
+     full-width button retired on 2026-07-27, whose two-tone logic Gabriel
+     asked to keep: dark grey + light play, then brand orange + black stop. */
+  color: var(--text-normal);
+  background: var(--background-modifier-border);
   cursor: pointer;
   transition: background 0.15s ease, transform 0.1s ease;
 }
 
 .claudian-send-stop-btn:hover {
-  background: var(--interactive-accent-hover);
+  background: var(--background-modifier-border-hover);
 }
 
 .claudian-send-stop-btn:active {
@@ -256,14 +261,19 @@
   height: 15px;
 }
 
-/* Stop state reads as "interrupt", not as a second send. */
+/* Stop state reads as "interrupt", not as a second send. Brand orange with a
+   black glyph: the one moment in the composer that is allowed to shout, and the
+   only element that carries this colour, so "orange = something is running"
+   stays unambiguous. --claudian-brand with a literal fallback, same as the
+   retired runtime patch used, so the colour survives a missing token. */
 .claudian-send-stop-btn--streaming {
-  color: var(--text-normal);
-  background: var(--background-modifier-border);
+  color: #000;
+  background: var(--claudian-brand, #d97757);
 }
 
 .claudian-send-stop-btn--streaming:hover {
-  background: var(--background-modifier-border-hover);
+  background: var(--claudian-brand, #d97757);
+  opacity: 0.85;
 }
 
 /* The button is absolutely positioned inside the wrapper, so the wrapper has

@@ -90,13 +90,105 @@
   });
 
   check('send/stop button present and in a sane state', () => {
-    const btn = document.querySelector('.claudian-send-stop-btn');
-    if (!btn) return { ok: false, error: 'no send/stop button — open a Claudian tab first' };
-    const state = btn.getAttribute('data-state');
-    // Whatever it shows must match reality: a button stuck on "stop" after the
+    // Whatever a button shows must match reality: one stuck on "stop" after its
     // stream ended is worse than no button, because clicking it does nothing.
-    const streaming = Boolean(document.querySelector('.claudian-tab-badge-streaming'));
-    return { ok: state === (streaming ? 'stop' : 'send'), state, streaming };
+    //
+    // Compared PER TAB, and that correction matters. This check used to take
+    // `querySelector('.claudian-send-stop-btn')` — one arbitrary button, the
+    // first in document order — and compare it against
+    // `querySelector('.claudian-tab-badge-streaming')`, i.e. "is ANY tab
+    // streaming". With one tab that is the same question. With three tabs where
+    // two stream and one idles it is guaranteed to disagree with itself, and it
+    // reported red while every button was in fact correct. That false red is
+    // what the 2026-07-27 handover recorded as "der sichtbare Knopf stand
+    // während eines laufenden Streams auf Send message" — a broken assertion
+    // wearing the costume of a broken button.
+    let view = null;
+    app.workspace.iterateAllLeaves((leaf) => {
+      if (leaf.view && leaf.view.tabManager) view = leaf.view;
+    });
+    if (!view) return { ok: false, error: 'no Claudian view — open a Claudian tab first' };
+
+    const mismatches = [];
+    let checked = 0;
+    for (const [tabId, tab] of view.tabManager.tabs) {
+      const wrapper = tab && tab.dom && tab.dom.inputWrapper;
+      if (!wrapper) continue;
+      const btn = wrapper.querySelector('.claudian-send-stop-btn');
+      if (!btn) {
+        mismatches.push({ tabId, error: 'tab has no send/stop button' });
+        continue;
+      }
+      checked += 1;
+      const state = btn.getAttribute('data-state');
+      const streaming = Boolean(tab.state && tab.state.isStreaming);
+      const expected = streaming ? 'stop' : 'send';
+      if (state !== expected) mismatches.push({ tabId, state, expected, streaming });
+    }
+
+    if (!checked) return { ok: false, error: 'no composer carried a send/stop button' };
+    return { ok: mismatches.length === 0, checked, ...(mismatches.length ? { mismatches } : {}) };
+  });
+
+  check('exactly ONE send/stop control per composer', () => {
+    // The bug this exists for: ui-fixes.js (the 1.3.72-era runtime patch) kept
+    // injecting a full-width `.claudian-send-button` into every composer after
+    // the fork grew its own button. Two stacked controls, both live, both
+    // wired to different mechanisms. It shipped because every check asked "is
+    // the button there?" and none asked "is it the ONLY one?".
+    const legacy = document.querySelectorAll('.claudian-send-button').length;
+    if (legacy > 0) {
+      return { ok: false, error: `${legacy}x legacy .claudian-send-button — ui-fixes.js Fix 1 injiziert wieder`, legacy };
+    }
+    // One per composer, not one in total: hidden tabs carry their own.
+    const composers = document.querySelectorAll('.claudian-input-wrapper').length;
+    const buttons = document.querySelectorAll('.claudian-send-stop-btn').length;
+    return { ok: composers === buttons, composers, buttons };
+  });
+
+  check('send/stop button carries the two-tone colour logic', () => {
+    // Colour is the whole point of this control: dark = idle, orange = running.
+    // A theme or a refactor that flattens both states to one colour removes the
+    // only at-a-glance signal that a turn is still going.
+    //
+    // BOTH states are asserted positively, and that is not pedantry. The first
+    // version of this check only tested "streaming => orange" and let the idle
+    // state pass on "not orange". Its own negative control exposed it: painting
+    // an idle button purple kept the check green, because purple is indeed not
+    // orange. Purple-when-idle is precisely the regression this exists to
+    // catch — the check would have been decoration.
+    // Caveat for whoever debugs a surprising red here: the button carries
+    // `transition: background 0.15s`, and getComputedStyle reports the CURRENT
+    // frame of a running transition, not the target. Sampled within ~150ms of a
+    // state flip it returns a blend (measured: rgb(171,101,150) halfway from
+    // orange to purple) and neither branch below matches. At rest it is exact.
+    // Let the UI settle before trusting a red from this check.
+    const isOrange = (m) => m.length >= 3 && +m[0] > 180 && +m[1] > 90 && +m[1] < 160 && +m[2] < 130;
+    // Neutral means the three channels sit close together, whatever the theme's
+    // shade of grey. Purple rgb(120,80,220) spreads 140 and fails; the
+    // rgb(54,54,54) this ships with spreads 0.
+    const isNeutralDark = (m) => {
+      if (m.length < 3) return false;
+      const [r, g, b] = m.slice(0, 3).map(Number);
+      return Math.max(r, g, b) - Math.min(r, g, b) < 20 && Math.max(r, g, b) < 110;
+    };
+
+    const wrong = [];
+    let checked = 0;
+    document.querySelectorAll('.claudian-send-stop-btn').forEach((btn, i) => {
+      const bg = getComputedStyle(btn).backgroundColor;
+      const m = bg.match(/\d+/g) || [];
+      // Fully transparent means the element is in a torn-down tab; skip rather
+      // than invent a verdict about a button nobody can see.
+      if (m.length >= 4 && Number(m[3]) === 0) return;
+      checked += 1;
+      const streaming = btn.classList.contains('claudian-send-stop-btn--streaming');
+      const good = streaming ? isOrange(m) : isNeutralDark(m);
+      if (!good) wrong.push({ i, streaming, bg, expected: streaming ? 'brand orange' : 'neutral dark' });
+    });
+
+    if (!checked) return { ok: false, error: 'no send/stop button with a resolvable background' };
+    return { ok: wrong.length === 0, checked, ...(wrong.length ? { wrong } : {}) };
   });
 
   check('tab badge shows its NUMBER unless the user named it', () => {

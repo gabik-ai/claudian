@@ -5,7 +5,15 @@
 #   bin/deploy.sh                     build + install into the live vault plugin
 #   bin/deploy.sh --target DIR        install somewhere else (staging, tests)
 #   bin/deploy.sh --no-build          install the artifacts already in the repo
+#   bin/deploy.sh --no-reload         install, but do NOT reload the plugin
 #   bin/deploy.sh --dry-run           show what would happen, touch nothing
+#
+# --no-reload is MANDATORY when Claudian itself is running this script.
+# The last step is `obsidian plugin:reload id=claudian`, and Claudian is the
+# plugin that hosts the agent session. Reloading it mid-run tears down the very
+# process that issued the command: the answer stops mid-sentence with no error,
+# which reads to the user like a crash. It cost three aborted turns on
+# 2026-07-27 before the cause was found. Install here, let the human reload.
 #
 # Every build is archived under
 #   ~/Library/Application Support/claudian-releases/<version>-<sha>[-dirty]/
@@ -20,15 +28,17 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-common.sh"
 
 TARGET="$DEFAULT_TARGET"
 DO_BUILD=1
+DO_RELOAD=1
 DRY_RUN=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --target)   TARGET="${2:?--target braucht einen Pfad}"; shift 2 ;;
-    --no-build) DO_BUILD=0; shift ;;
-    --dry-run)  DRY_RUN=1; shift ;;
-    -h|--help)  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *)          die "Unbekannte Option: $1" ;;
+    --target)    TARGET="${2:?--target braucht einen Pfad}"; shift 2 ;;
+    --no-build)  DO_BUILD=0; shift ;;
+    --no-reload) DO_RELOAD=0; shift ;;
+    --dry-run)   DRY_RUN=1; shift ;;
+    -h|--help)   sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *)           die "Unbekannte Option: $1" ;;
   esac
 done
 
@@ -123,5 +133,10 @@ printf '%s\n' "$RELEASE_NAME" > "$CURRENT_FILE"
 history_append "$RELEASE_NAME" "$TARGET" "$MAIN_SHA"
 
 c_green "Deployed $RELEASE_NAME → $TARGET"
-reload_plugin_if_live "$TARGET"
+if [ "$DO_RELOAD" = "1" ]; then
+  reload_plugin_if_live "$TARGET"
+else
+  c_yellow "Reload uebersprungen (--no-reload). Aktiv wird der Stand erst nach"
+  c_yellow "  obsidian plugin:reload id=claudian   (oder Obsidian neu starten)."
+fi
 c_dim "Rollback: bin/rollback.sh --target $TARGET"
