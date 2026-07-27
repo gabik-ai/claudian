@@ -56,6 +56,21 @@
   padding: 0 8px;
 }
 
+/* mazel: drag feedback while reordering badges. Values carried over unchanged
+   from the pre-fork behaviour, so the gesture looks exactly as it did.
+   The dragged badge fades; the badge under the cursor shows where it will land.
+   The 1px inset shadow doubles the accent border without moving anything —
+   growing the border instead would shift every badge to its right by a pixel
+   for the length of the drag. */
+.claudian-tab-badge-dragging {
+  opacity: 0.4;
+}
+
+.claudian-tab-badge-drag-over {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 1px var(--interactive-accent);
+}
+
 /* mazel: inline rename state. Reads as an input field so it is obvious the
    badge is editable, without shifting the layout. */
 .claudian-tab-badge-renaming {

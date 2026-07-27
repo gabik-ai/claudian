@@ -584,6 +584,39 @@ export class TabManager implements TabManagerInterface {
     return this.tabs.size < this.getMaxTabs();
   }
 
+  /**
+   * mazel: moves a tab so it sits directly before another one.
+   *
+   * The tab order IS the insertion order of `this.tabs`, and
+   * `getPersistedState()` reads that same order, so rebuilding the map is all
+   * it takes for the new order to survive a restart. No extra field, no second
+   * source of truth that could drift from the map.
+   *
+   * The target position is looked up AFTER the source has been taken out. Doing
+   * it before is the classic off-by-one here: removing an element to the left of
+   * the target shifts the target down by one, and the tab lands one slot past
+   * where it was dropped — only when dragging left to right, which is exactly
+   * the kind of asymmetry that survives a quick manual test.
+   */
+  reorderTabs(fromTabId: TabId, toTabId: TabId): void {
+    if (fromTabId === toTabId) return;
+
+    const entries = Array.from(this.tabs.entries());
+    const fromIndex = entries.findIndex(([id]) => id === fromTabId);
+    if (fromIndex === -1 || !entries.some(([id]) => id === toTabId)) return;
+
+    const [moved] = entries.splice(fromIndex, 1);
+    const insertAt = entries.findIndex(([id]) => id === toTabId);
+    entries.splice(insertAt, 0, moved);
+
+    this.tabs.clear();
+    for (const [id, tab] of entries) {
+      this.tabs.set(id, tab);
+    }
+
+    this.notifyPersistedStateChanged();
+  }
+
   // ============================================
   // Tab Bar Data
   // ============================================

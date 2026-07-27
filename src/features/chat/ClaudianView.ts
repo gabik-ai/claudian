@@ -349,6 +349,12 @@ export class ClaudianView extends ItemView {
       // what makes the badge show the name instead of its number, so it has to
       // be written out as soon as it changes.
       onUserNamedConversationsChanged: () => this.persistTabState(),
+      // mazel: the tab order IS the order of the manager's map, so reordering
+      // is a manager concern; the bar only reports the gesture.
+      onTabReorder: (fromTabId, toTabId) => {
+        this.tabManager?.reorderTabs(fromTabId, toTabId);
+        this.updateTabBar();
+      },
     });
 
     const navActionsEl = wrapper.createDiv({ cls: 'claudian-input-nav-actions' });

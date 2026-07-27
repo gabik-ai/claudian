@@ -46,12 +46,47 @@
     return { ok: mcp >= 0 && ext >= 0 && mcp < ext, mcpIndex: mcp, externalIndex: ext };
   });
 
-  check('M1: context meter never prints a four-digit k value', () => {
-    const meter = document.querySelector('.claudian-context-meter');
-    if (!meter) return { ok: false, error: 'context meter not rendered — send one message first' };
-    const tooltip = meter.getAttribute('data-tooltip') || '';
-    if (!tooltip) return { ok: false, error: 'meter has no tooltip yet (no usage data)' };
-    return { ok: !/\b\d{4,}k\b/.test(tooltip), tooltip };
+  check('M1: nowhere in the UI does a four-digit k value appear', () => {
+    // The claim M1 makes is a NEGATIVE one: a million-token window must never
+    // read as "1000k". So the honest test is to sweep the whole UI for such a
+    // value, not to interrogate one tooltip.
+    //
+    // The earlier version did the latter and reported RED whenever the tooltip
+    // was empty — which under 2.0.41 is always, because the meter now shows a
+    // percentage and its label is the constant "Context usage". A check that
+    // cries failure when it simply cannot measure is worse than no check: it
+    // trains everyone to ignore a red line.
+    // Scope matters twice over, and both mistakes were made before landing here.
+    //
+    // Too narrow: `.claudian-view` does not exist as a class (the root carries
+    // `data-type`). The sweep found zero roots, searched nothing, and reported
+    // GREEN. A check that passes because it looked nowhere is the worst result
+    // there is.
+    //
+    // Too wide: the whole view includes the message list, which is user text.
+    // This very conversation mentions "1000k", so the sweep flagged the chat
+    // itself. A check that fires on what the user wrote gets muted within a day.
+    //
+    // Correct scope is the chrome, where a formatted token count would actually
+    // be rendered: the composer toolbar, the meter, the tab bar. Never messages.
+    const roots = document.querySelectorAll(
+      '.claudian-input-toolbar, .claudian-context-meter, .claudian-tab-badges',
+    );
+    if (roots.length === 0) return { ok: false, error: 'no toolbar/meter in the DOM — nothing was searched' };
+
+    const hits = [];
+    roots.forEach(root => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (/\b\d{4,}k\b/.test(node.textContent || '')) hits.push((node.textContent || '').trim().slice(0, 40));
+      }
+      root.querySelectorAll('[aria-label],[data-tooltip],[title]').forEach(el => {
+        const label = `${el.getAttribute('aria-label') || ''} ${el.getAttribute('data-tooltip') || ''} ${el.getAttribute('title') || ''}`;
+        if (/\b\d{4,}k\b/.test(label)) hits.push(label.trim().slice(0, 40));
+      });
+    });
+    return { ok: hits.length === 0, ...(hits.length ? { hits } : {}) };
   });
 
   check('send/stop button present and in a sane state', () => {

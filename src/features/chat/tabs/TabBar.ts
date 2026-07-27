@@ -42,6 +42,12 @@ export interface TabBarCallbacks {
    * disagree, and the name would look lost.
    */
   onUserNamedConversationsChanged?: (conversationIds: string[]) => void;
+
+  /**
+   * mazel: called when a badge is dropped on another one. The dragged tab is
+   * placed directly before the tab it was dropped on.
+   */
+  onTabReorder?: (fromTabId: TabId, toTabId: TabId) => void;
 }
 
 /**
@@ -59,6 +65,18 @@ export class TabBar {
   private userNamedConversationIds = new Set<string>();
   /** mazel: a tab switch held back to see whether a dblclick follows. */
   private pendingClickTimer: number | null = null;
+  /** mazel: the badge currently being dragged, if any. */
+  private draggedTabId: TabId | null = null;
+  /**
+   * mazel: display numbers, frozen the first time a tab is seen.
+   *
+   * Without this, the number is just the position in the list, so dragging a
+   * tab renumbers it and every tab it passed. The number would then be a
+   * description of the current order rather than a name for the tab, and the
+   * whole point of dragging (put my tab where I want it, keep calling it 3)
+   * would be lost.
+   */
+  private stableTabNumbers = new Map<TabId, number>();
   private lastKnownScrollLeft = 0;
   private readonly handleScroll = (): void => {
     this.captureScrollPosition();
@@ -92,6 +110,10 @@ export class TabBar {
 
     this.captureStableScrollPosition();
     this.pruneExpandedTitleState(items);
+    // mazel: must run BEFORE the badges are rendered, otherwise a closed tab
+    // keeps its number reserved for one more frame and a new tab is pushed to
+    // a higher number than it needs.
+    this.pruneStableNumbers(items);
 
     // Clear existing badges
     this.containerEl.empty();
@@ -171,6 +193,53 @@ export class TabBar {
       this.beginRename(item, badgeEl);
     });
 
+    // mazel: reordering by dragging a badge onto another one.
+    //
+    // Native HTML5 drag rather than pointer maths, because the badges sit in a
+    // horizontally scrolling strip: the browser handles autoscroll at the edges
+    // and the drag image for free, and both are fiddly to reproduce by hand.
+    badgeEl.setAttribute('draggable', 'true');
+
+    badgeEl.addEventListener('dragstart', (e: DragEvent) => {
+      this.draggedTabId = item.id;
+      // A drag that starts from a click must not also switch tabs when it ends.
+      this.clearPendingClick();
+      badgeEl.addClass('claudian-tab-badge-dragging');
+      e.dataTransfer?.setData('text/plain', item.id);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+    });
+
+    badgeEl.addEventListener('dragover', (e: DragEvent) => {
+      if (this.draggedTabId === null || this.draggedTabId === item.id) return;
+      // Without preventDefault the browser refuses the drop outright, and the
+      // drop handler below is simply never called.
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      badgeEl.addClass('claudian-tab-badge-drag-over');
+    });
+
+    badgeEl.addEventListener('dragleave', () => {
+      badgeEl.removeClass('claudian-tab-badge-drag-over');
+    });
+
+    badgeEl.addEventListener('drop', (e: DragEvent) => {
+      e.preventDefault();
+      badgeEl.removeClass('claudian-tab-badge-drag-over');
+      const fromTabId = this.draggedTabId;
+      this.draggedTabId = null;
+      if (fromTabId === null || fromTabId === item.id) return;
+      this.callbacks.onTabReorder?.(fromTabId, item.id);
+    });
+
+    badgeEl.addEventListener('dragend', () => {
+      // Runs even when the drop happened outside any badge, so this is the one
+      // place guaranteed to clear the drag state. Without it a cancelled drag
+      // leaves the badge at 40 % opacity for good.
+      badgeEl.removeClass('claudian-tab-badge-dragging');
+      badgeEl.removeClass('claudian-tab-badge-drag-over');
+      this.draggedTabId = null;
+    });
+
     // Right-click to close (if allowed)
     if (item.canClose) {
       badgeEl.addEventListener('contextmenu', (e) => {
@@ -190,6 +259,8 @@ export class TabBar {
     this.deferredItems = null;
     this.clearPendingClick();
     this.userNamedConversationIds.clear();
+    this.stableTabNumbers.clear();
+    this.draggedTabId = null;
     this.lastKnownScrollLeft = 0;
   }
 
@@ -368,10 +439,51 @@ export class TabBar {
     }
 
     if (!this.expandedTitleTabIds.has(item.id)) {
-      return String(item.index);
+      return String(this.getStableNumber(item));
     }
 
     return this.truncateExpandedTitle(item.title);
+  }
+
+  /**
+   * mazel: the number a tab keeps for as long as it is open.
+   *
+   * Assigned on first sight and never recalculated, so reordering leaves every
+   * number where it was. A new tab takes its current position, exactly as
+   * before the fork — and only if that number is already taken does it fall
+   * back to the lowest free one.
+   *
+   * That fallback is the one deliberate departure. The pre-fork version took
+   * the position unconditionally, so closing the middle of three tabs and
+   * opening a new one handed out a number that was still in use: two badges
+   * labelled 3. Keeping a defect is not the same as keeping behaviour.
+   *
+   * The fallback is a collision escape, NOT a compaction pass: with tabs 1 and
+   * 2 closed and 3 still open, a new tab becomes 2 and the free 1 stays free.
+   * Renumbering to close that gap would move a number the user is already
+   * reading, which is the very thing this map exists to prevent.
+   */
+  private getStableNumber(item: TabBarItem): number {
+    const existing = this.stableTabNumbers.get(item.id);
+    if (existing !== undefined) return existing;
+
+    const taken = new Set(this.stableTabNumbers.values());
+    let candidate = item.index;
+    if (taken.has(candidate)) {
+      candidate = 1;
+      while (taken.has(candidate)) candidate += 1;
+    }
+
+    this.stableTabNumbers.set(item.id, candidate);
+    return candidate;
+  }
+
+  /** mazel: forgets the numbers of tabs that are gone, so they can be reused. */
+  private pruneStableNumbers(items: TabBarItem[]): void {
+    const visible = new Set(items.map(item => item.id));
+    for (const tabId of this.stableTabNumbers.keys()) {
+      if (!visible.has(tabId)) this.stableTabNumbers.delete(tabId);
+    }
   }
 
   /** mazel: true if the user gave this tab's conversation a name by hand. */

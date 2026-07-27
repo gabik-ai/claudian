@@ -125,6 +125,21 @@ def check_tab_rename(bundle: str) -> tuple[str, bool, str]:
     return ok("tab rename", "dblclick-Editor da, Upstream-Toggle entfernt, Merker vorhanden")
 
 
+def check_tab_drag(bundle: str) -> tuple[str, bool, str]:
+    # Upstream has no drag on the badges at all: no `draggable`, no dragstart,
+    # no reorder. Everything checked here is ours, so a miss means the feature
+    # is simply gone rather than merely renamed.
+    for needle, why in (
+        ("claudian-tab-badge-dragging", "Drag-Optik fehlt"),
+        ("claudian-tab-badge-drag-over", "Ziel-Markierung fehlt"),
+        ("dragstart", "Drag-Start-Handler fehlt"),
+        ("reorderTabs", "Reorder im TabManager fehlt"),
+    ):
+        if needle not in bundle:
+            return fail("tab drag-reorder", why)
+    return ok("tab drag-reorder", "Handler, Reorder und beide Zustandsklassen im Bundle")
+
+
 def check_attention_trigger(bundle: str) -> tuple[str, bool, str]:
     # Upstream ships the whole apparatus for the finished-answer frame except
     # the moment that raises it. The assignment is what we add, and minifiers
@@ -169,6 +184,7 @@ def main() -> int:
         check_m5(bundle),
         check_task_reducer(bundle),
         check_tab_rename(bundle),
+        check_tab_drag(bundle),
         check_attention_trigger(bundle),
         check_send_stop(bundle),
     ]
