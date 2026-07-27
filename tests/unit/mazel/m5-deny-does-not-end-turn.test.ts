@@ -14,10 +14,9 @@
  * The patch drops `continue` to `true`. The tool stays blocked (the deny does
  * that), the model gets told why, and it can pick a read-only path instead.
  */
-import { execFileSync } from 'child_process';
-import { join } from 'path';
-
 import { createReadOnlyHook } from '@/providers/claude/auxiliary/ClaudeInlineEditService';
+
+import { readUpstreamFile } from './upstreamRef';
 
 type HookResult = {
   continue?: boolean;
@@ -78,19 +77,8 @@ describe('obsolescence guard: M5', () => {
   it('upstream still aborts the turn on deny', () => {
     // The day upstream stops sending `continue: false` here, this patch is a
     // no-op and should be deleted rather than carried through every rebase.
-    const repoRoot = join(__dirname, '..', '..', '..');
-
-    let upstreamSource: string;
-    try {
-      upstreamSource = execFileSync(
-        'git',
-        ['show', 'origin/main:src/providers/claude/auxiliary/ClaudeInlineEditService.ts'],
-        { cwd: repoRoot, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
-      );
-    } catch {
-      // origin/main not fetched (shallow or single-branch checkout) — skip.
-      return;
-    }
+    const upstreamSource = readUpstreamFile('src/providers/claude/auxiliary/ClaudeInlineEditService.ts');
+    if (upstreamSource === null) return;
 
     const hookBody = /export function createReadOnlyHook\(\)[\s\S]*?\n\}/.exec(upstreamSource)?.[0] ?? '';
     expect(hookBody).not.toBe('');

@@ -1,0 +1,84 @@
+name: mazel CI
+
+# Deliberately a SEPARATE file from upstream's ci.yml, which only triggers on
+# `main`. Editing that file would produce a rebase conflict on every single
+# upstream release for no gain. This one owns the `mazel` branch; upstream's
+# never fires here.
+
+on:
+  push:
+    branches: [mazel]
+  pull_request:
+    branches: [mazel]
+  workflow_dispatch:
+
+concurrency:
+  group: mazel-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 for two reasons: `rebase --onto` in the sync workflow
+          # fails outright without it, and the obsolescence guards need to read
+          # files out of origin/main.
+          fetch-depth: 0
+
+      - name: Fetch the upstream mirror branch
+        # A PR checkout does not necessarily create refs/remotes/origin/main,
+        # and MAZEL_REQUIRE_UPSTREAM_REF below turns a missing ref into a hard
+        # failure — on purpose, so the guards cannot silently skip in CI.
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        env:
+          # Guards must genuinely run here. Without this they degrade to a
+          # silent `return` when origin/main is missing, which is a check that
+          # always passes — the exact failure mode that let M4 and Fix 7 rot
+          # unnoticed for months.
+          MAZEL_REQUIRE_UPSTREAM_REF: '1'
+        run: npm run test
+
+      - name: Build
+        run: npm run build && npm run check:performance
+
+      - name: Assert the built bundle actually carries every mazel patch
+        # A green test suite proves the source is patched. This proves the thing
+        # we would ship is. Minification has eaten patches before without any
+        # test noticing.
+        run: python3 bin/assert-bundle.py .
+
+      - name: Patch series stays small and touches no dependency manifest
+        run: |
+          set -euo pipefail
+          base=$(git merge-base HEAD origin/main)
+          count=$(git rev-list --count "$base..HEAD")
+          echo "Patch-Serie: $count Commits über $base"
+          git log --oneline "$base..HEAD"
+          if [ "$count" -gt 10 ]; then
+            echo "::error::Patch-Serie hat $count Commits, Obergrenze ist 10 (SPEC.md)."
+            exit 1
+          fi
+          # package.json or a lockfile in the series means a conflict on every
+          # single upstream release. Never worth it.
+          if git diff --name-only "$base..HEAD" | grep -qE '^(package(-lock)?\.json|bun\.lock)$'; then
+            echo "::error::Die Patch-Serie fasst package.json oder ein Lockfile an."
+            git diff --name-only "$base..HEAD" | grep -E '^(package(-lock)?\.json|bun\.lock)$'
+            exit 1
+          fi

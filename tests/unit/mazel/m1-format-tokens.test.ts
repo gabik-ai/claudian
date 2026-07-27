@@ -9,11 +9,11 @@
  * turns this red.
  */
 import { createMockEl } from '@test/helpers/mockElement';
-import { execFileSync } from 'child_process';
-import { join } from 'path';
 
 import type { UsageInfo } from '@/core/types';
 import { ContextUsageMeter } from '@/features/chat/ui/InputToolbar';
+
+import { readUpstreamFile } from './upstreamRef';
 
 jest.mock('obsidian', () => ({
   Notice: jest.fn(),
@@ -83,19 +83,8 @@ describe('obsolescence guard: M1', () => {
   it('upstream formatTokens still has no million branch', () => {
     // If upstream learns the M unit itself, this patch is dead weight and the
     // guard says so instead of us carrying it for months unnoticed.
-    const repoRoot = join(__dirname, '..', '..', '..');
-
-    let upstreamSource: string;
-    try {
-      upstreamSource = execFileSync(
-        'git',
-        ['show', 'origin/main:src/features/chat/ui/InputToolbar.ts'],
-        { cwd: repoRoot, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
-      );
-    } catch {
-      // origin/main not fetched (shallow or single-branch checkout) — skip.
-      return;
-    }
+    const upstreamSource = readUpstreamFile('src/features/chat/ui/InputToolbar.ts');
+    if (upstreamSource === null) return;
 
     const match = /private formatTokens\(tokens: number\): string \{[\s\S]*?\n {2}\}/.exec(upstreamSource);
     expect(match).not.toBeNull();

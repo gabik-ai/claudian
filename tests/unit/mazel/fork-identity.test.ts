@@ -15,6 +15,8 @@ import { execFileSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+import { readUpstreamFile } from './upstreamRef';
+
 const repoRoot = join(__dirname, '..', '..', '..');
 
 function readJson(relativePath: string): Record<string, unknown> {
@@ -54,17 +56,9 @@ describe('obsolescence guard: fork identity', () => {
   it('upstream still uses a different id (patch still needed)', () => {
     // Read the pristine upstream manifest from git so this guard cannot be
     // fooled by our own working tree.
-    let upstreamManifest: string;
-    try {
-      upstreamManifest = execFileSync('git', ['show', 'origin/main:manifest.json'], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-      });
-    } catch {
-      // origin/main not fetched (shallow or single-branch checkout) — skip
-      // rather than fail; the assertions above still cover the patch itself.
-      return;
-    }
+    const upstreamManifest = readUpstreamFile('manifest.json');
+    if (upstreamManifest === null) return;
+
     const upstreamId = (JSON.parse(upstreamManifest) as { id: string }).id;
     expect(upstreamId).not.toBe('claudian');
   });

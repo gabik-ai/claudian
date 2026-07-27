@@ -1,0 +1,236 @@
+name: upstream sync
+
+# Rebases the mazel patch series onto the newest upstream commit and opens a PR
+# with a range-diff, so a human reads the *diff of the diffs* instead of a wall
+# of upstream changes.
+#
+# Four things this workflow gets right that the obvious version gets wrong:
+#
+#  1. `on: schedule` only ever fires on the DEFAULT branch. `mazel` is the
+#     default branch of this fork precisely so this cron runs at all. If someone
+#     ever flips the default back to `main`, this file goes silent without a
+#     single error — check that first when the sync stops happening.
+#  2. `git rebase` exits non-zero even when rerere resolved everything cleanly.
+#     Never branch on its exit code; ask `git diff --diff-filter=U` whether
+#     anything is actually still conflicted.
+#  3. A PR opened with the default GITHUB_TOKEN does not trigger workflow runs,
+#     so mazel CI would never check it. SYNC_PAT is required, not optional.
+#  4. fetch-depth: 0, otherwise `rebase --onto` fails immediately on a shallow
+#     clone.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays 06:17 UTC
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: 'Upstream ref to rebase onto (default: upstream/main)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail fast if SYNC_PAT is missing
+        env:
+          SYNC_PAT: ${{ secrets.SYNC_PAT }}
+        run: |
+          if [ -z "$SYNC_PAT" ]; then
+            echo "::error::secrets.SYNC_PAT fehlt. Ohne PAT löst der erzeugte PR keine Checks aus," \
+                 "der Sync-PR wäre also ungeprüft. Token mit repo-Scope anlegen und als SYNC_PAT hinterlegen."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: mazel
+          token: ${{ secrets.SYNC_PAT }}
+
+      - name: Configure git
+        run: |
+          git config user.name  "mazel-sync[bot]"
+          git config user.email "gabriel@mazelmail.de"
+          # Reuse conflict resolutions across runs. Without this, the same
+          # hunk is re-resolved by hand at every upstream release.
+          git config rerere.enabled true
+          git config rerere.autoUpdate true
+
+      - name: Restore the rerere cache
+        uses: actions/cache@v4
+        with:
+          path: .git/rr-cache
+          key: rerere-${{ github.run_id }}
+          restore-keys: rerere-
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/YishenTu/claudian.git 2>/dev/null || true
+          git fetch upstream --tags --force
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Work out the rebase range
+        id: range
+        run: |
+          set -euo pipefail
+          NEW="${{ github.event.inputs.upstream_ref }}"
+          [ -n "$NEW" ] || NEW="upstream/main"
+          NEW_SHA=$(git rev-parse "$NEW")
+          # Computed, never stored: a merge-base cannot go stale the way a
+          # checked-in "last synced sha" file can.
+          OLD_SHA=$(git merge-base "$NEW_SHA" origin/mazel)
+          VERSION=$(git show "$NEW_SHA:package.json" | python3 -c 'import json,sys;print(json.load(sys.stdin)["version"])')
+
+          echo "old=$OLD_SHA"      >> "$GITHUB_OUTPUT"
+          echo "new=$NEW_SHA"      >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION"  >> "$GITHUB_OUTPUT"
+          echo "short=$(git rev-parse --short "$NEW_SHA")" >> "$GITHUB_OUTPUT"
+
+          if [ "$OLD_SHA" = "$NEW_SHA" ]; then
+            echo "uptodate=1" >> "$GITHUB_OUTPUT"
+            echo "Bereits auf dem neuesten Upstream-Stand."
+          else
+            echo "uptodate=0" >> "$GITHUB_OUTPUT"
+            echo "Upstream $VERSION ($NEW_SHA), unsere Basis $OLD_SHA"
+            git log --oneline "$OLD_SHA..$NEW_SHA" | head -40
+          fi
+
+      - name: Fast-forward the mirror branch
+        if: steps.range.outputs.uptodate == '0'
+        run: |
+          set -euo pipefail
+          # `main` stays a patch-free mirror so `gh repo sync` can always
+          # fast-forward it. Any patch here breaks that property forever.
+          git push origin "${{ steps.range.outputs.new }}:refs/heads/main"
+
+      - name: Rebase the patch series
+        if: steps.range.outputs.uptodate == '0'
+        id: rebase
+        run: |
+          set -uo pipefail
+          BRANCH="sync/upstream-${{ steps.range.outputs.version }}-${{ steps.range.outputs.short }}"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          git switch -c "$BRANCH" origin/mazel
+
+          # Exit code is meaningless here: rebase reports failure even when
+          # rerere resolved every hunk. The working tree is the truth.
+          git rebase --onto "${{ steps.range.outputs.new }}" "${{ steps.range.outputs.old }}" || true
+
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            git rebase --continue </dev/null >/dev/null 2>&1 || true
+            git rebase --show-current-patch >/dev/null 2>&1 || break
+            if [ -n "$(git diff --diff-filter=U --name-only)" ]; then break; fi
+          done
+
+          UNMERGED="$(git diff --diff-filter=U --name-only)"
+          if [ -n "$UNMERGED" ]; then
+            echo "conflicts<<EOF"  >> "$GITHUB_OUTPUT"
+            echo "$UNMERGED"       >> "$GITHUB_OUTPUT"
+            echo "EOF"             >> "$GITHUB_OUTPUT"
+            echo "clean=0"         >> "$GITHUB_OUTPUT"
+            git rebase --abort || true
+          else
+            echo "clean=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Range-diff — the diff of the diffs
+        if: steps.range.outputs.uptodate == '0' && steps.rebase.outputs.clean == '1'
+        id: rangediff
+        run: |
+          set -euo pipefail
+          {
+            git range-diff \
+              "${{ steps.range.outputs.old }}..origin/mazel" \
+              "${{ steps.range.outputs.new }}..HEAD" || true
+          } > /tmp/range-diff.txt
+          head -200 /tmp/range-diff.txt
+
+          # `git cherry` marks a patch "-" once upstream carries it. That is the
+          # signal to DELETE the patch, not to keep rebasing it.
+          git cherry -v "${{ steps.range.outputs.new }}" HEAD > /tmp/cherry.txt || true
+          if grep -q '^-' /tmp/cherry.txt; then
+            echo "absorbed=1" >> "$GITHUB_OUTPUT"
+            grep '^-' /tmp/cherry.txt
+          else
+            echo "absorbed=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push the sync branch
+        if: steps.range.outputs.uptodate == '0' && steps.rebase.outputs.clean == '1'
+        run: git push --force-with-lease origin "HEAD:${{ steps.rebase.outputs.branch }}"
+
+      - name: Open the sync PR
+        if: steps.range.outputs.uptodate == '0' && steps.rebase.outputs.clean == '1'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          set -euo pipefail
+          {
+            echo "Upstream **${{ steps.range.outputs.version }}** (\`${{ steps.range.outputs.short }}\`)."
+            echo
+            echo "Der Rebase lief ohne offene Konflikte durch. **Das beweist nur, dass der Text"
+            echo "noch passte, nicht dass die Patches noch wirken.** Dafür ist mazel CI da:"
+            echo "Test-Suite, Obsoleszenz-Wächter und \`assert-bundle.py\` auf dem gebauten Bundle."
+            echo
+            if [ "${{ steps.rangediff.outputs.absorbed }}" = "1" ]; then
+              echo "> [!warning]"
+              echo "> \`git cherry\` meldet mindestens einen Patch als von Upstream übernommen."
+              echo "> Der gehört **gelöscht**, nicht weiter mitgeschleppt:"
+              echo '```'
+              grep '^-' /tmp/cherry.txt || true
+              echo '```'
+              echo
+            fi
+            echo "### range-diff"
+            echo '```'
+            head -300 /tmp/range-diff.txt
+            echo '```'
+          } > /tmp/pr-body.md
+
+          gh pr create \
+            --base mazel \
+            --head "${{ steps.rebase.outputs.branch }}" \
+            --title "sync: upstream ${{ steps.range.outputs.version }} (${{ steps.range.outputs.short }})" \
+            --body-file /tmp/pr-body.md
+
+      - name: Open an issue when the rebase genuinely conflicts
+        if: steps.range.outputs.uptodate == '0' && steps.rebase.outputs.clean == '0'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          set -euo pipefail
+          {
+            echo "**Versucht:** Rebase der mazel-Serie von \`${{ steps.range.outputs.old }}\`"
+            echo "auf Upstream ${{ steps.range.outputs.version }} (\`${{ steps.range.outputs.short }}\`),"
+            echo "mit rerere-Cache."
+            echo
+            echo "**Gescheitert an:** echten Konflikten in"
+            echo '```'
+            echo "${{ steps.rebase.outputs.conflicts }}"
+            echo '```'
+            echo
+            echo "**Mein Vorschlag:** lokal auflösen, dann pushen:"
+            echo '```bash'
+            echo "cd ~/Workspace/claudian-fork"
+            echo "git fetch upstream --tags && git fetch origin"
+            echo "git switch -c sync/manual-${{ steps.range.outputs.short }} origin/mazel"
+            echo "git rebase --onto ${{ steps.range.outputs.new }} ${{ steps.range.outputs.old }}"
+            echo "# nach jedem Hunk: bin/smoke.sh --target <staging>  statt nur auf grünen Rebase vertrauen"
+            echo '```'
+            echo
+            echo "**Rückfrage:** Konflikt auflösen, oder ist der betroffene Patch inzwischen"
+            echo "upstream nativ und kann ersatzlos raus?"
+          } > /tmp/issue.md
+
+          gh issue create \
+            --title "sync: Rebase auf ${{ steps.range.outputs.version }} braucht eine Entscheidung" \
+            --body-file /tmp/issue.md

@@ -11,10 +11,10 @@
  * that silently restores upstream's order turns this red.
  */
 import { createMockEl } from '@test/helpers/mockElement';
-import { execFileSync } from 'child_process';
-import { join } from 'path';
 
 import { createInputToolbar } from '@/features/chat/ui/InputToolbar';
+
+import { readUpstreamFile } from './upstreamRef';
 
 jest.mock('obsidian', () => ({
   Notice: jest.fn(),
@@ -122,19 +122,8 @@ describe('obsolescence guard: M2', () => {
   it('upstream still builds external-context before MCP', () => {
     // Once upstream adopts our order this patch is dead weight — the guard
     // says so instead of us carrying a no-op commit through every rebase.
-    const repoRoot = join(__dirname, '..', '..', '..');
-
-    let upstreamSource: string;
-    try {
-      upstreamSource = execFileSync(
-        'git',
-        ['show', 'origin/main:src/features/chat/ui/InputToolbar.ts'],
-        { cwd: repoRoot, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
-      );
-    } catch {
-      // origin/main not fetched (shallow or single-branch checkout) — skip.
-      return;
-    }
+    const upstreamSource = readUpstreamFile('src/features/chat/ui/InputToolbar.ts');
+    if (upstreamSource === null) return;
 
     const upstreamExternal = upstreamSource.indexOf('new ExternalContextSelector(parentEl');
     const upstreamMcp = upstreamSource.indexOf('new McpServerSelector(parentEl');
