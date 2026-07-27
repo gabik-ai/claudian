@@ -664,7 +664,29 @@ function order(manager: TabManager): string[] {
 // C) TabManager.reorderTabs
 // ============================================================
 
-describe('mazel: reorderTabs puts the dragged tab directly before the target', () => {
+/*
+ * Der Vertrag wurde am 2026-07-27 KORRIGIERT, nicht erweitert.
+ *
+ * Vorher stand hier "der gezogene Tab landet direkt VOR dem Ziel", samt einem
+ * Test, der das Ziehen auf den rechten Nachbarn als No-op festnagelte. Dieser
+ * Vertrag ist nicht umkehrbar: er kann einen Tab nur nach links bewegen. Wer
+ * Tab 2 auf Position 1 zieht, bekommt ihn nie wieder auf 2 — er muss statt
+ * dessen den anderen Tab nach links ziehen. Genau das hat Gabriel gemeldet.
+ *
+ * Der richtige Vertrag, und zugleich der der Vorfassung: der gezogene Tab
+ * uebernimmt die POSITION des Ziels. Nach links heisst das vor dem Ziel, nach
+ * rechts hinter dem Ziel, und jeder Zug ist durch den Gegenzug ruecknehmbar.
+ * Belegt, nicht bevorzugt: `projects/claudian/ui-fixes.js` Zeile 478-487 im
+ * Vault bestimmt `ti` VOR dem Splice und fuegt an `ti` ein — Zeile fuer Zeile
+ * das, was `reorderTabs` jetzt tut.
+ *
+ * Lehre fuers Protokoll: die alten Tests waren nicht schlampig, sie waren
+ * ausfuehrlich begruendet und trotzdem falsch. Ein Test kann eine Regression
+ * genauso sorgfaeltig zementieren wie ein Verhalten. Der Kommentar erklaerte
+ * den Off-by-one korrekt und uebersah, dass die Anforderung darueber schon
+ * nicht stimmte.
+ */
+describe('mazel: reorderTabs moves the dragged tab to the target position', () => {
   it('dragging C onto A: [A,B,C] becomes [C,A,B]', async () => {
     const { manager } = await setupManager();
     expect(order(manager)).toEqual(['tab-1', 'tab-2', 'tab-3']);
@@ -674,37 +696,52 @@ describe('mazel: reorderTabs puts the dragged tab directly before the target', (
     expect(order(manager)).toEqual(['tab-3', 'tab-1', 'tab-2']);
   });
 
-  it('dragging A onto C: [A,B,C] becomes [B,A,C] — the off-by-one test', async () => {
-    // Warum dieser Test hier steht:
-    //
-    // "Direkt VOR das Ziel" muss die Zielposition NACH dem Herausnehmen der
-    // Quelle bestimmt werden. Nimmt man A heraus, rutscht C von Index 2 auf 1,
-    // und A wird an Index 1 eingefuegt: [B, A, C]. Richtig.
-    //
-    // Bestimmt man den Index dagegen VORHER (C liegt bei 2) und fuegt danach
-    // an Index 2 ein, entsteht [B, C, A] — A landet HINTER dem Ziel, obwohl der
-    // Nutzer es davor abgelegt hat.
-    //
-    // Der Fehler tritt ausschliesslich beim Ziehen nach RECHTS auf: nur dann
-    // liegt die Quelle links vom Ziel und verschiebt es beim Entfernen. Der
-    // Test von oben (nach links ziehen) bleibt gruen. Genau diese Asymmetrie
-    // ueberlebt einen schnellen Handtest, deshalb ist sie hier festgenagelt.
+  it('dragging A onto C: [A,B,C] becomes [B,C,A] — rightward lands after the target', async () => {
+    // Nach rechts gezogen uebernimmt A die Position von C, also den letzten
+    // Platz. Wer ein Element nach rechts zieht, will es dort haben, wo das Ziel
+    // war — nicht davor, sonst waere der Zug ueber einen einzelnen Nachbarn
+    // wirkungslos.
     const { manager } = await setupManager();
 
     manager.reorderTabs('tab-1', 'tab-3');
 
-    expect(order(manager)).toEqual(['tab-2', 'tab-1', 'tab-3']);
+    expect(order(manager)).toEqual(['tab-2', 'tab-3', 'tab-1']);
   });
 
-  it('dragging a tab onto its immediate right neighbour is a no-op', async () => {
-    // A liegt bereits direkt vor B, "A vor B legen" aendert also nichts. Der
-    // kleinstmoegliche Rechts-Zug — und wieder ein Off-by-one-Faenger: mit
-    // vorab bestimmter Zielposition entstuende hier [B, A, C], also eine
-    // Vertauschung, die der Nutzer nie verlangt hat.
+  it('dragging a tab onto its immediate right neighbour swaps the two', async () => {
+    // Der kleinstmoegliche Rechts-Zug, und der Kern des gemeldeten Fehlers:
+    // vorher war das ein No-op, der Tab liess sich also nur nach links bewegen.
     const { manager } = await setupManager();
 
     manager.reorderTabs('tab-1', 'tab-2');
 
+    expect(order(manager)).toEqual(['tab-2', 'tab-1', 'tab-3']);
+  });
+
+  it('every drag is undone by dragging back — the reversibility Gabriel reported', async () => {
+    // Gabriels Fall in Testform: Tab 2 nach vorn holen, dann wieder
+    // zurueckschieben. Mit dem alten Vertrag scheiterte der zweite Zug still.
+    const { manager } = await setupManager();
+
+    manager.reorderTabs('tab-2', 'tab-1');
+    expect(order(manager)).toEqual(['tab-2', 'tab-1', 'tab-3']);
+
+    manager.reorderTabs('tab-2', 'tab-1');
+    expect(order(manager)).toEqual(['tab-1', 'tab-2', 'tab-3']);
+  });
+
+  it('a full lap around three tabs returns to the start', async () => {
+    // Schaerfer als der Test darueber: nicht nur eine Bewegung und zurueck,
+    // sondern jede Position einmal. Ein Vertrag, der irgendwo unterwegs einen
+    // Zug verschluckt, kommt hier nicht heraus, wo er hineinging.
+    const { manager } = await setupManager();
+
+    manager.reorderTabs('tab-1', 'tab-2');
+    manager.reorderTabs('tab-1', 'tab-3');
+    expect(order(manager)).toEqual(['tab-2', 'tab-3', 'tab-1']);
+
+    manager.reorderTabs('tab-1', 'tab-3');
+    manager.reorderTabs('tab-1', 'tab-2');
     expect(order(manager)).toEqual(['tab-1', 'tab-2', 'tab-3']);
   });
 

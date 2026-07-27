@@ -16,6 +16,16 @@
   max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
+  /* Room for the badges that lift themselves. The vault snippet raises the
+     active and hovered badge by 1px and a drag-over target by 2px plus
+     scale(1.02) — all of which this box was cropping flat, so the top edge of
+     the active tab looked shaved off.
+     `overflow-y: hidden` has to stay: it cannot be relaxed to `visible`,
+     because with `overflow-x: auto` the CSS spec computes a `visible` other
+     axis to `auto`, which would hang a vertical scrollbar under the tab strip.
+     Padding is therefore the only way to give the lift somewhere to go. */
+  padding-top: 3px;
+  padding-bottom: 1px;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -77,11 +87,21 @@
   flex: 0 0 auto;
   justify-content: flex-start;
   width: auto;
-  max-width: none;
+  /* Capped, not `none`. Unbounded, the badge grew with every keystroke and
+     pushed the whole strip sideways, so a long name never LOOKED long — the tab
+     just kept expanding to swallow it. 190px is the width a normal badge is
+     allowed, so the editor can never exceed what the badge can later display:
+     the moment the text stops fitting, that is visible while typing, which is
+     exactly what Gabriel asked for on 2026-07-27.
+     overflow-x auto rather than hidden so the caret stays in view — the text
+     scrolls under a fixed frame, the way the pre-fork <input> did. */
+  max-width: 190px;
   min-width: 8ch;
   padding: 0 8px;
   cursor: text;
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
   white-space: pre;
   background: var(--background-primary);
   border-color: var(--interactive-accent);
@@ -146,4 +166,10 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+/* The rename editor scrolls its text horizontally; the bar itself must not be
+   visible or a 36px badge gets a scrollbar across its bottom third. */
+.claudian-tab-badge-renaming::-webkit-scrollbar {
+  display: none;
 }

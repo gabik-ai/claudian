@@ -255,6 +255,33 @@
     return { ok: distinct.length === 1, gaps, ...(distinct.length > 1 ? { distinct } : {}) };
   });
 
+  check('no tab badge is cropped by the strip it sits in', () => {
+    // The strip needs `overflow-y: hidden` (its sibling axis scrolls, and the
+    // CSS spec turns a `visible` cross-axis into `auto`, which would hang a
+    // scrollbar under the tabs). The badges meanwhile lift themselves: the vault
+    // snippet raises the active and hovered badge 1px and a drag-over target
+    // 2px. Hidden overflow plus a lift equals a shaved top edge, which is what
+    // Gabriel reported on 2026-07-27 — visible, but far too small to attribute
+    // to anything without measuring. Padding buys the room; this asserts the
+    // room is still there, in rendered pixels rather than in a declaration.
+    const strip = [...document.querySelectorAll('.claudian-tab-badges, .claudian-tab-bar-container')]
+      .find((el) => el.getBoundingClientRect().width > 0 && el.querySelector('.claudian-tab-badge'));
+    if (!strip) return { ok: false, error: 'no visible tab strip' };
+    const sr = strip.getBoundingClientRect();
+    const cropped = [];
+    const badges = [...strip.querySelectorAll('.claudian-tab-badge')];
+    badges.forEach((b, i) => {
+      const br = b.getBoundingClientRect();
+      if (br.width === 0) return;
+      // Half a pixel of tolerance: sub-pixel layout is normal, a shaved edge is
+      // not. A scale() transform on a drag-over target is what makes this
+      // fractional rather than whole.
+      if (br.top < sr.top - 0.5) cropped.push({ i, over: Math.round((sr.top - br.top) * 10) / 10 });
+      if (br.bottom > sr.bottom + 0.5) cropped.push({ i, under: Math.round((br.bottom - sr.bottom) * 10) / 10 });
+    });
+    return { ok: cropped.length === 0, badges: badges.length, ...(cropped.length ? { cropped } : {}) };
+  });
+
   check('tab badge shows its NUMBER unless the user named it', () => {
     // Since 2026-07-27 plain dblclick renames; upstream's expand/collapse toggle
     // is gone. An unnamed badge must therefore read as a plain number. If this

@@ -332,13 +332,25 @@ export class TabBar {
 
     const originalTitle = item.title;
 
+    // What the field starts with: the name the USER gave this tab, or nothing.
+    // Never the auto-generated conversation title.
+    //
+    // It used to open prefilled with `item.title`, which for an unnamed tab is
+    // the model's own summary — "Implement Vault Context Diet Phase A". So a
+    // double click on a numbered badge produced a long sentence the user never
+    // asked for, and the first keystroke had to clear it. This matches the
+    // pre-fork behaviour exactly, which seeded the field with
+    // `customLabel || ''` (ui-fixes.js Fix 5). Gabriel's words on 2026-07-27:
+    // the auto name is not needed, and if it is kept it has to fit.
+    const seedTitle = this.isUserNamed(item) ? originalTitle : '';
+
     // The badge normally shows a number, so widen it to hold text while the
     // editor is open. Purely visual: no tab-keyed state is touched here, since
     // the name that comes out of this belongs to the conversation.
     badgeEl.addClass('claudian-tab-badge-renaming');
     badgeEl.setAttribute('contenteditable', 'plaintext-only');
     badgeEl.setAttribute('role', 'textbox');
-    badgeEl.textContent = originalTitle;
+    badgeEl.textContent = seedTitle;
 
     this.selectAll(badgeEl);
     badgeEl.focus();

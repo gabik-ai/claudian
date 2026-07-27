@@ -603,11 +603,20 @@ export class TabManager implements TabManagerInterface {
 
     const entries = Array.from(this.tabs.entries());
     const fromIndex = entries.findIndex(([id]) => id === fromTabId);
-    if (fromIndex === -1 || !entries.some(([id]) => id === toTabId)) return;
+    // The target index has to be read BEFORE the move, and that is the whole
+    // bug this replaces. The old code spliced the dragged tab out first and
+    // only then searched for the target, so for a rightward drag the target had
+    // already slid one place left and the tab landed back where it started:
+    // dragging position 1 onto position 2 did nothing at all. Only leftward
+    // drags worked, which made the gesture one-way — to push a tab right you
+    // had to drag its neighbour left instead. Read first, then move: leftward
+    // lands before the target, rightward lands after it, and every drag is
+    // undone by dragging back.
+    const toIndex = entries.findIndex(([id]) => id === toTabId);
+    if (fromIndex === -1 || toIndex === -1) return;
 
     const [moved] = entries.splice(fromIndex, 1);
-    const insertAt = entries.findIndex(([id]) => id === toTabId);
-    entries.splice(insertAt, 0, moved);
+    entries.splice(toIndex, 0, moved);
 
     this.tabs.clear();
     for (const [id, tab] of entries) {

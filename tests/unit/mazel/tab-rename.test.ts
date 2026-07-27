@@ -117,13 +117,35 @@ function dblclick(h: Harness, event: Record<string, unknown> = {}): void {
 }
 
 describe('mazel: the dblclick gesture belongs to the rename', () => {
-  it('a plain dblclick starts the rename', () => {
+  it('a plain dblclick starts the rename with an EMPTY field on an unnamed tab', () => {
+    // Geaendert am 2026-07-27. Vorher oeffnete das Feld mit `item.title`, und
+    // das ist bei einem unbenannten Tab der Auto-Titel des Modells, also ein
+    // ganzer Satz ("Implement Vault Context Diet Phase A"). Ein Doppelklick auf
+    // eine Ziffer erzeugte damit einen langen Namen, den niemand verlangt hat,
+    // und die erste Taste musste ihn erst wegloeschen.
+    // Die Vorfassung im Vault fuellte `currentLabel || ''` (ui-fixes.js Fix 5,
+    // `input.value` in Zeile 407) — leer, wenn es keinen eigenen Namen gab.
     const h = setup();
 
     dblclick(h);
 
     expect(h.bar.isRenaming()).toBe(true);
     expect(badge(h).getAttribute('contenteditable')).toBe('plaintext-only');
+    expect(badge(h).textContent).toBe('');
+  });
+
+  it('a dblclick on a tab the user DID name opens with that name, ready to edit', () => {
+    // Gegenstueck zum Test darueber, sonst beweist "leer" nichts: die
+    // Vorbelegung darf nicht generell weg sein, sie darf nur den Auto-Titel
+    // nicht mehr einsetzen. Einen selbst gegebenen Namen zu korrigieren, ohne
+    // ihn neu tippen zu muessen, ist der Normalfall.
+    const h = setup();
+    h.bar.setUserNamedConversationIds(['conv-1']);
+    h.bar.update([h.item]);
+
+    dblclick(h);
+
+    expect(h.bar.isRenaming()).toBe(true);
     expect(badge(h).textContent).toBe('Test Tab');
   });
 
@@ -336,16 +358,38 @@ describe('mazel: inline rename', () => {
     expect(h.item.title).toBe('Chosen by hand');
   });
 
-  it('an unchanged name does not fire a pointless rename, but still pins the name', () => {
-    // Confirming the name you already see is a deliberate act: on a tab that
-    // was never named it is the only way to pin the current auto-title.
+  it('confirming the empty field on a never-named tab pins nothing', () => {
+    // Umgeschrieben am 2026-07-27, zusammen mit der leeren Vorbelegung.
+    //
+    // Vorher hiess dieser Test "pinnt trotzdem den Namen": das Feld oeffnete
+    // mit dem Auto-Titel, Enter bestaetigte ihn, und der Tab trug ab da einen
+    // Satz als Namen. Das war der letzte Weg, auf dem ein Auto-Titel dauerhaft
+    // ins Badge kam — und damit genau das, was am 2026-07-27 weg sollte.
+    // Jetzt ist Enter auf dem leeren Feld ein Nicht-Ereignis: die Ziffer bleibt.
     const h = setup();
     startRename(h);
 
     fire(badge(h), 'keydown', { key: 'Enter' });
 
     expect(h.callbacks.onTabRename).not.toHaveBeenCalled();
-    expect(h.callbacks.onUserNamedConversationsChanged).toHaveBeenCalledWith(['conv-1']);
+    expect(h.bar.getUserNamedConversationIds()).not.toContain('conv-1');
+    expect(badge(h).textContent).toBe('1');
+  });
+
+  it('confirming an unchanged name on a NAMED tab keeps it and fires no rename', () => {
+    // Negativ-Kontrolle: das Bestaetigen darf nicht generell wirkungslos sein.
+    // Wer einen eigenen Namen hat, das Feld oeffnet und Enter drueckt, behaelt
+    // ihn — ohne dass ein Umbenennen nach oben gemeldet wird, denn es hat sich
+    // nichts geaendert.
+    const h = setup();
+    h.bar.setUserNamedConversationIds(['conv-1']);
+    h.bar.update([h.item]);
+    dblclick(h);
+
+    fire(badge(h), 'keydown', { key: 'Enter' });
+
+    expect(h.callbacks.onTabRename).not.toHaveBeenCalled();
+    expect(h.bar.getUserNamedConversationIds()).toContain('conv-1');
     expect(badge(h).textContent).toBe('Test Tab');
   });
 
