@@ -173,18 +173,34 @@
       return Math.max(r, g, b) - Math.min(r, g, b) < 20 && Math.max(r, g, b) < 110;
     };
 
+    // Asserted as an INVERSION, both channels, because that is the actual
+    // contract Gabriel specified on 2026-07-27: whatever is the plate in one
+    // state is the glyph in the other. Testing the background alone would pass
+    // a button whose plate flips while the glyph stays put — which looks broken
+    // and reads as one colour with a mystery symbol on it.
     const wrong = [];
     let checked = 0;
     document.querySelectorAll('.claudian-send-stop-btn').forEach((btn, i) => {
-      const bg = getComputedStyle(btn).backgroundColor;
-      const m = bg.match(/\d+/g) || [];
+      const cs = getComputedStyle(btn);
+      const bgm = (cs.backgroundColor.match(/\d+/g) || []);
+      const fgm = (cs.color.match(/\d+/g) || []);
       // Fully transparent means the element is in a torn-down tab; skip rather
       // than invent a verdict about a button nobody can see.
-      if (m.length >= 4 && Number(m[3]) === 0) return;
+      if (bgm.length >= 4 && Number(bgm[3]) === 0) return;
       checked += 1;
       const streaming = btn.classList.contains('claudian-send-stop-btn--streaming');
-      const good = streaming ? isOrange(m) : isNeutralDark(m);
-      if (!good) wrong.push({ i, streaming, bg, expected: streaming ? 'brand orange' : 'neutral dark' });
+      const good = streaming
+        ? isOrange(bgm) && isNeutralDark(fgm)
+        : isNeutralDark(bgm) && isOrange(fgm);
+      if (!good) {
+        wrong.push({
+          i,
+          streaming,
+          bg: cs.backgroundColor,
+          fg: cs.color,
+          expected: streaming ? 'orange plate, dark glyph' : 'dark plate, orange glyph',
+        });
+      }
     });
 
     if (!checked) return { ok: false, error: 'no send/stop button with a resolvable background' };

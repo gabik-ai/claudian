@@ -227,29 +227,44 @@
    Upstream has no send button at all — Enter and Escape only, both of which
    need the textarea focused. This sits at the bottom-right of the composer,
    always visible and always clickable. */
+/* Near-black, one step below the composer's own --background-primary (#1e1e1e)
+   so the button reads as a recessed well rather than a raised chip. Defined
+   once because the two states swap it with the brand orange: whatever is the
+   background in one state is the glyph in the other. */
+.claudian-input-wrapper {
+  --claudian-sendstop-dark: #111111;
+}
+
 .claudian-send-stop-btn {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
+  /* Top-right of the box. It used to sit bottom-right, where it landed on top
+     of the permission toggle — measured 9px from the wrapper edge against the
+     YOLO chip's 15px, so the two overlapped instead of lining up.
+     14px, not 15px, and the difference is not a fudge: the wrapper carries a
+     1px border, an absolutely positioned offset resolves against the PADDING
+     box, and the YOLO chip is in normal flow inside the BORDER box. right:15px
+     therefore measures 16px from the same edge the chip measures 15px from.
+     14 + 1px border = the 15px the eye compares against. Re-derive this if the
+     wrapper's border-width ever changes. */
+  right: 14px;
+  top: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 26px;
   height: 26px;
   border-radius: 6px;
-  /* Idle reads as "ready", not as a call to action: dark surface, light glyph.
-     The accent purple this used to be competed with the tab badges and the
-     usage bars for the same "look here" signal. Carried over from the
-     full-width button retired on 2026-07-27, whose two-tone logic Gabriel
-     asked to keep: dark grey + light play, then brand orange + black stop. */
-  color: var(--text-normal);
-  background: var(--background-modifier-border);
+  /* Idle: near-black plate, orange triangle. Running inverts it exactly.
+     The colour never disappears, it only swaps sides — so the state is legible
+     from the corner of the eye without reading the glyph. */
+  color: var(--claudian-brand, #d97757);
+  background: var(--claudian-sendstop-dark, #111111);
   cursor: pointer;
   transition: background 0.15s ease, transform 0.1s ease;
 }
 
 .claudian-send-stop-btn:hover {
-  background: var(--background-modifier-border-hover);
+  background: #1a1a1a;
 }
 
 .claudian-send-stop-btn:active {
@@ -267,7 +282,7 @@
    stays unambiguous. --claudian-brand with a literal fallback, same as the
    retired runtime patch used, so the colour survives a missing token. */
 .claudian-send-stop-btn--streaming {
-  color: #000;
+  color: var(--claudian-sendstop-dark, #111111);
   background: var(--claudian-brand, #d97757);
 }
 
@@ -277,11 +292,23 @@
 }
 
 /* The button is absolutely positioned inside the wrapper, so the wrapper has
-   to be the positioning context and the textarea has to keep clear of it. */
+   to be the positioning context and whatever sits under it has to keep clear. */
 .claudian-input-wrapper {
   position: relative;
 }
 
-.claudian-input-wrapper .claudian-input {
-  padding-right: 40px;
+/* This keep-clear was dead for as long as it existed. It was written as
+   `.claudian-input-wrapper .claudian-input` (0,2,0) while the rule that sets
+   the real padding is `.claudian-input-wrapper textarea.claudian-input`
+   (0,2,1) — the element selector wins, so the computed value stayed 10px and
+   text ran under the button. Matched specificity, and it must stay AFTER the
+   padding shorthand at the top of this file or the shorthand resets it. */
+.claudian-input-wrapper textarea.claudian-input {
+  padding-right: 48px;
+}
+
+/* Context chips share the top row with the button now. Without this they grow
+   underneath it, and the "+N more" chip is the first thing to disappear. */
+.claudian-input-wrapper .claudian-context-row {
+  padding-right: 48px;
 }

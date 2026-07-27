@@ -169,21 +169,45 @@ def check_send_stop(bundle: str, plugin_dir: str) -> tuple[str, bool, str]:
     with open(css_path, encoding="utf8") as fh:
         css = fh.read()
 
-    streaming = css.split(".claudian-send-stop-btn--streaming {", 1)
-    if len(streaming) < 2:
-        return fail("send/stop button", "Streaming-Regel fehlt in styles.css")
-    streaming_block = streaming[1].split("}", 1)[0]
-    if "--claudian-brand" not in streaming_block:
-        return fail("send/stop button", "Streaming ist nicht Marken-Orange — Farblogik verloren")
+    def block(marker: str) -> str | None:
+        parts = css.split(marker, 1)
+        return parts[1].split("}", 1)[0] if len(parts) == 2 else None
 
-    idle = css.split("\n.claudian-send-stop-btn {", 1)
-    if len(idle) < 2:
+    streaming_block = block(".claudian-send-stop-btn--streaming {")
+    if streaming_block is None:
+        return fail("send/stop button", "Streaming-Regel fehlt in styles.css")
+    idle_block = block("\n.claudian-send-stop-btn {")
+    if idle_block is None:
         return fail("send/stop button", "Ruhe-Regel fehlt in styles.css")
-    idle_block = idle[1].split("}", 1)[0]
+
     if "--interactive-accent" in idle_block:
         return fail("send/stop button", "Ruhezustand wieder auf Accent-Lila — Rueckfall")
 
-    return ok("send/stop button", "beide Zustaende, Icon-Paar und Farblogik")
+    # Die Farblogik ist eine UMKEHRUNG, keine Einzelfarbe: Platte und Symbol
+    # tauschen die Rollen. Nur den Hintergrund zu pruefen liesse einen Zustand
+    # durch, in dem die Platte kippt und das Symbol stehenbleibt.
+    def has(decl_block: str, prop: str, needle: str) -> bool:
+        for line in decl_block.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(prop + ":") and needle in stripped:
+                return True
+        return False
+
+    if not has(idle_block, "background", "sendstop-dark"):
+        return fail("send/stop button", "Ruhe-Platte ist nicht das dunkle Token")
+    if not has(idle_block, "color", "--claudian-brand"):
+        return fail("send/stop button", "Ruhe-Symbol ist nicht Marken-Orange")
+    if not has(streaming_block, "background", "--claudian-brand"):
+        return fail("send/stop button", "Streaming-Platte ist nicht Marken-Orange")
+    if not has(streaming_block, "color", "sendstop-dark"):
+        return fail("send/stop button", "Streaming-Symbol ist nicht das dunkle Token")
+
+    # Position: oben rechts, buendig mit dem YOLO-Chip. `bottom` waere der alte
+    # Sitz ueber dem Permission-Toggle.
+    if "top:" not in idle_block or "bottom:" in idle_block:
+        return fail("send/stop button", "Knopf sitzt nicht oben (top fehlt oder bottom zurueck)")
+
+    return ok("send/stop button", "Zustaende, Icon-Paar, Farb-Umkehrung, Position oben")
 
 
 def main() -> int:
