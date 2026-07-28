@@ -206,6 +206,11 @@ export class StreamController {
         await this.appendText(`\n\n⚠️ **${chunk.level === 'warning' ? 'Blocked' : 'Notice'}:** ${chunk.content}`);
         break;
 
+      case 'stop_hook_retry':
+        this.flushPendingTools();
+        await this.discardStopHookDraft(msg);
+        break;
+
       case 'error':
         // Flush pending tools before rendering error message
         this.flushPendingTools();
@@ -1044,6 +1049,47 @@ export class StreamController {
 
     state.currentTextContent += text;
     void this.scheduleCurrentTextRender();
+  }
+
+  /**
+   * Throws away the answer draft that a Stop hook just rejected.
+   *
+   * The CLI cannot retract an assistant message it already streamed: it injects
+   * synthetic feedback and lets the model write a replacement. Without this the
+   * replacement is appended to the same bubble and the user reads both versions.
+   *
+   * Only the trailing TEXT is removed. Tool calls and thinking stay, they really
+   * happened and the rewrite must not pretend otherwise.
+   */
+  async discardStopHookDraft(msg: ChatMessage): Promise<void> {
+    const { state } = this.deps;
+    await this.flushPendingTextRender();
+
+    let draft = '';
+
+    if (state.currentTextEl) {
+      draft = state.currentTextContent;
+      state.currentTextEl.remove();
+      state.currentTextEl = null;
+      state.currentTextContent = '';
+    } else if (msg.contentBlocks && msg.contentBlocks.length > 0) {
+      // Already finalized (a tool ran after the text, or the turn boundary hit first).
+      const last = msg.contentBlocks[msg.contentBlocks.length - 1];
+      if (last && last.type === 'text') {
+        draft = last.content;
+        msg.contentBlocks.pop();
+        const blocks = state.currentContentEl?.querySelectorAll('.claudian-text-block');
+        if (blocks && blocks.length > 0) {
+          blocks[blocks.length - 1]?.remove();
+        }
+      }
+    }
+
+    if (draft && msg.content.endsWith(draft)) {
+      msg.content = msg.content.slice(0, msg.content.length - draft.length);
+    }
+
+    this.showThinkingIndicator();
   }
 
   async finalizeCurrentTextBlock(msg?: ChatMessage): Promise<void> {

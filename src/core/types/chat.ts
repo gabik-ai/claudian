@@ -159,6 +159,11 @@ export type StreamChunk =
       providerSessionId?: string;
     }
   | { type: 'notice'; content: string; level?: 'info' | 'warning' }
+  /**
+   * A Stop hook blocked the answer that was just streamed; the model is about to
+   * write a replacement. Consumers must discard the draft instead of appending to it.
+   */
+  | { type: 'stop_hook_retry'; reason: string }
   | { type: 'done' }
   | { type: 'usage'; usage: UsageInfo; sessionId?: string | null }
   | { type: 'context_compacted' }

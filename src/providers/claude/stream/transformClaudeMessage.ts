@@ -9,6 +9,7 @@ import {
   isClaudeModelTier,
 } from '../modelTiers';
 import { isBlockedMessage } from '../sdk/messages';
+import { extractStopHookFeedback } from '../sdk/stopHookFeedback';
 import { extractToolResultContent } from '../sdk/toolResultContent';
 import type { ClaudeAsyncSubagentCompletionEvent, TransformEvent } from '../sdk/types';
 import { isDefaultClaudeModel, resolveContextWindowSize } from '../types/models';
@@ -466,6 +467,14 @@ export function* transformSDKMessage(
 
     case 'user': {
       const parentToolUseId = message.parent_tool_use_id ?? null;
+
+      // A Stop hook blocked the answer we just streamed. The CLI cannot retract it,
+      // so tell the UI to throw the draft away before the rewrite arrives.
+      const stopHookReason = extractStopHookFeedback(message);
+      if (stopHookReason !== null) {
+        yield { type: 'stop_hook_retry', reason: stopHookReason };
+        break;
+      }
 
       // Check for blocked tool calls (from hook denials)
       if (isBlockedMessage(message)) {
