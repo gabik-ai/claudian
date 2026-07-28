@@ -151,12 +151,19 @@ def check_attention_trigger(bundle: str) -> tuple[str, bool, str]:
     return ok("attention trigger", "Ausloeser und Zustandsklasse im Bundle")
 
 
-def check_permission_chip(bundle: str) -> tuple[str, bool, str]:
+def check_permission_chip(bundle: str, plugin_dir: str) -> tuple[str, bool, str]:
     """Der Drei-Zustands-Chip fuer den Berechtigungsmodus (ex ui-fixes.js Fix 2).
 
     Geprueft wird die Klasse UND der Kreis. Nur die Klasse zu pruefen liesse
     einen Chip durch, der zwar da ist, aber wieder nur zwei Zustaende kennt —
     und genau das ist der Upstream-Zustand, aus dem wir kommen.
+
+    Und geprueft wird die CSS, aus dem gleichen Grund wie beim Send/Stop-Knopf.
+    Dieser Check war am 2026-07-28 falsch-gruen: Klasse, Plan-Zustand und
+    Attribut standen alle im Bundle, aber keine einzige Regel stylte den Chip.
+    Das Aussehen kam bis dahin aus der Laufzeit-Injektion `ui-fixes.js` Fix 2 v5,
+    also aus einer Datei, die der Bundle-Check nie gesehen hat. Beim naechsten
+    Obsidian-Neustart rendert ein solcher Chip als nackter Text.
     """
     if '"claudian-mode-button"' not in bundle and "'claudian-mode-button'" not in bundle:
         return fail("permission chip", "Chip-Klasse fehlt — Schalter waere weg")
@@ -171,7 +178,21 @@ def check_permission_chip(bundle: str) -> tuple[str, bool, str]:
     # unterscheiden, welche Komponente die Klasse setzt. Die Abwesenheit des
     # Schiebers NEBEN dem Chip prueft deshalb die Laufzeit-Zusicherung
     # "permission chip is native", die im echten DOM nachsehen kann.
-    return ok("permission chip", "Chip, Plan-Zustand und Modus-Attribut im Bundle")
+
+    css_path = os.path.join(plugin_dir, "styles.css")
+    if not os.path.isfile(css_path):
+        return fail("permission chip", "styles.css fehlt — Aussehen nicht pruefbar")
+    with open(css_path, encoding="utf8") as fh:
+        css = fh.read()
+
+    if "\n.claudian-mode-button {" not in css:
+        return fail("permission chip", "Grundregel fehlt in styles.css — Chip waere nackter Text")
+    # Je Zustand eine eigene Regel. Ohne sie sehen Safe, YOLO und Plan gleich
+    # aus, und die Farbe ist beim Berechtigungsmodus die eigentliche Anzeige.
+    for state in ("mode-safe", "mode-yolo", "mode-plan"):
+        if f".claudian-mode-button.{state} {{" not in css:
+            return fail("permission chip", f"Farbregel fuer {state} fehlt in styles.css")
+    return ok("permission chip", "Chip, Plan-Zustand, Modus-Attribut und 3 Farbregeln")
 
 
 def check_send_stop(bundle: str, plugin_dir: str) -> tuple[str, bool, str]:
@@ -272,7 +293,7 @@ def main() -> int:
         check_tab_drag(bundle),
         check_attention_trigger(bundle),
         check_send_stop(bundle, plugin_dir),
-        check_permission_chip(bundle),
+        check_permission_chip(bundle, plugin_dir),
     ]
 
     failed = 0

@@ -14,6 +14,51 @@
   padding-right: 2px;
 }
 
+/* mazel: the three-state chip rendered by PermissionModeButton.
+   These declarations are NOT new. They are the ones `ui-fixes.js` Fix 2 v5
+   injected into <head> at runtime. Commit 745e82f moved the behaviour into the
+   component and 9621e8d7d deleted the injection, but the look travelled with
+   neither: from the next Obsidian restart on, the chip rendered as bare text.
+   Copied value for value from the injected stylesheet so the chip looks exactly
+   as it did before, not approximately. */
+.claudian-mode-button {
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  letter-spacing: 0.3px;
+}
+
+.claudian-mode-button:hover {
+  opacity: 0.85;
+}
+
+/* The chip is a div with role="button" and tabindex="0", so the browser draws
+   no focus ring of its own. The injected version was mouse-only and never
+   needed one. */
+.claudian-mode-button:focus-visible {
+  outline: 1px solid var(--claudian-brand);
+  outline-offset: 1px;
+}
+
+.claudian-mode-button.mode-safe {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.claudian-mode-button.mode-yolo {
+  background: rgba(var(--claudian-brand-rgb, 217, 119, 87), 0.2);
+  color: var(--claudian-brand, #d97757);
+}
+
+.claudian-mode-button.mode-plan {
+  background: rgba(92, 148, 140, 0.2);
+  color: rgb(92, 148, 140);
+}
+
 .claudian-permission-label {
   font-size: 11px;
   color: var(--text-muted);
