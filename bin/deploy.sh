@@ -133,6 +133,22 @@ printf '%s\n' "$RELEASE_NAME" > "$CURRENT_FILE"
 history_append "$RELEASE_NAME" "$TARGET" "$MAIN_SHA"
 
 c_green "Deployed $RELEASE_NAME → $TARGET"
+
+# 3b. Vault-Freigabe nachziehen, sofort und ohne Extra-Befehl.
+#     Der Vault verteilt Builds ueber `.claude/releases/claudian/`, und der
+#     SessionStart-Hook der Zielmaschine spielt von dort ein. Bleibt die Freigabe
+#     nach einem Deploy alt, macht dieser Hook aus dem frischen Build wieder den
+#     alten — auf der Baumaschine, lautlos, mit gruener Meldung. Am 2026-07-29 real
+#     passiert, unmittelbar nach dem Deploy dieses Patches.
+RELEASE_TOOL="$(dirname "$TARGET")/../../.claude/scripts/claudian-release.py"
+if [ -f "$RELEASE_TOOL" ]; then
+  if python3 "$RELEASE_TOOL" --veroeffentlichen >/dev/null 2>&1; then
+    c_dim "Vault-Freigabe nachgezogen (.claude/releases/claudian). Committen nicht vergessen."
+  else
+    c_yellow "Vault-Freigabe NICHT nachgezogen. Von Hand:"
+    c_yellow "  python3 .claude/scripts/claudian-release.py --veroeffentlichen"
+  fi
+fi
 if [ "$DO_RELOAD" = "1" ]; then
   reload_plugin_if_live "$TARGET"
 else

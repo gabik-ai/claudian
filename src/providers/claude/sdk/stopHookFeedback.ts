@@ -35,7 +35,7 @@ export function extractStopHookFeedback(message: { type: string }): string | nul
   if (message.type !== 'user') return null;
 
   const record = message as Record<string, unknown>;
-  if (record.isSynthetic !== true) return null;
+  const synthetic = record.isSynthetic === true;
 
   const inner = record.message as { content?: unknown } | undefined;
   const content = inner?.content;
@@ -55,7 +55,19 @@ export function extractStopHookFeedback(message: { type: string }): string | nul
 
   if (typeof text !== 'string') return null;
 
-  if (text.startsWith(STOP_HOOK_FEEDBACK_PREFIX)) {
+  // `isSynthetic` belongs to the SDK and is not guaranteed forever: the CLI's own
+  // persisted transcript stores the very same message as `isMeta: true` without
+  // it (measured 2026-07-29, CLI 2.1.220). Requiring the flag would make the
+  // double answer come back silently after an SDK release. So the flag is one of
+  // two routes, not the gate. The second route needs the message to BEGIN with a
+  // hook prefix, which a human message never does by accident.
+  const startsWithCliPrefix = text.startsWith(STOP_HOOK_FEEDBACK_PREFIX);
+  const startsWithMarker = text.startsWith(STIL_BLOCK_MARKER);
+  const looksLikeHookFeedback =
+    (startsWithCliPrefix || startsWithMarker) && text.includes(STIL_BLOCK_MARKER);
+  if (!synthetic && !looksLikeHookFeedback) return null;
+
+  if (startsWithCliPrefix) {
     return text.slice(STOP_HOOK_FEEDBACK_PREFIX.length).trim();
   }
 

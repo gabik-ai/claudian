@@ -23,6 +23,7 @@ import {
   SettingsPostCommitError,
 } from './app/settings/SettingsCoordinator';
 import { SharedStorageService } from './app/storage/SharedStorageService';
+import { writeRuntimeBeacon } from './core/bootstrap/runtimeBeacon';
 import type { SharedAppStorage } from './core/bootstrap/storage';
 import {
   getEnvironmentVariablesForScope as getScopedEnvironmentVariables,
@@ -137,6 +138,23 @@ export default class ClaudianPlugin extends Plugin {
         () => this.loadSettings({ deferNonRestoredSessionMetadata: true }),
       );
       // Provider workspace services are initialized lazily on first use.
+
+      // Mazel patch M9: stamp WHICH main.js this process actually loaded, so a
+      // guard outside Obsidian can tell "deployed" from "running". Fire and
+      // forget, it must never delay or fail the load.
+      void writeRuntimeBeacon(
+        {
+          stat: async (path) => {
+            const stat = await this.app.vault.adapter.stat(path);
+            return stat ? { size: stat.size, mtime: stat.mtime } : null;
+          },
+          write: (path, data) => this.app.vault.adapter.write(path, data),
+          mkdir: (path) => this.app.vault.adapter.mkdir(path),
+          exists: (path) => this.app.vault.adapter.exists(path),
+        },
+        this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`,
+        this.manifest.version,
+      );
 
       this.registerView(
         VIEW_TYPE_CLAUDIAN,

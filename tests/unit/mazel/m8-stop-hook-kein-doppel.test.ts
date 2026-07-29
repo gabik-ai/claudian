@@ -80,6 +80,31 @@ describe('mazel patch M8: stop-hook feedback is recognized', () => {
     expect(extractStopHookFeedback({ type: 'assistant' })).toBeNull();
   });
 
+  it('detects the block even WITHOUT isSynthetic, when our own marker is there', () => {
+    // `isSynthetic` belongs to the SDK. The CLI's persisted transcript already
+    // stores the same message as `isMeta: true` without the flag (measured
+    // 2026-07-29, CLI 2.1.220). If the stream ever follows, detection must hold.
+    const message = {
+      type: 'user',
+      isMeta: true,
+      message: {
+        role: 'user',
+        content: `${STOP_HOOK_FEEDBACK_PREFIX}\n${STIL_BLOCK_MARKER} Ein Absatz hat 4 Saetze.`,
+      },
+    };
+    expect(extractStopHookFeedback(message)).toBe(`${STIL_BLOCK_MARKER} Ein Absatz hat 4 Saetze.`);
+  });
+
+  it('still ignores a human message quoting the prefix without the marker', () => {
+    // Negative control for the route above: the fallback needs OUR marker, so a
+    // question about the hook cannot erase an answer.
+    const message = {
+      type: 'user',
+      message: { role: 'user', content: `${STOP_HOOK_FEEDBACK_PREFIX}\nwas bedeutet das?` },
+    };
+    expect(extractStopHookFeedback(message)).toBeNull();
+  });
+
   it('still detects the block when the CLI renames its own prefix', () => {
     // Belt and braces: `Stop hook feedback:` belongs to the CLI. Our hook owns
     // `[STIL-BLOCK]`, so a silent upstream rename cannot bring the double back.
