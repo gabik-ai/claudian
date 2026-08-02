@@ -338,7 +338,7 @@ export class ClaudianView extends ItemView {
       onTabRename: (tabId, title) => {
         const tab = this.tabManager?.getTab(tabId);
         if (!tab?.conversationId) return;
-        void this.plugin.renameConversation(tab.conversationId, title)
+        void this.plugin.renameConversation(tab.conversationId, title, { manual: true })
           .then(() => {
             this.updateTabBar();
             this.updateHistoryDropdown();

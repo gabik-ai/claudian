@@ -1291,6 +1291,15 @@ export class InputController {
       state.currentConversationId = conversation.id;
     }
 
+    // mazel: after /clear a hand-renamed tab keeps its name — apply it and
+    // skip fallback + AI titling entirely for this conversation.
+    const inheritedTitle = conversationController.consumeInheritedTitle?.() ?? null;
+    if (inheritedTitle) {
+      await plugin.renameConversation(state.currentConversationId, inheritedTitle, { manual: true });
+      conversationController.updateHistoryDropdown();
+      return;
+    }
+
     // Find first user message by role (not by index)
     const firstUserMsg = state.messages.find(m => m.role === 'user');
 

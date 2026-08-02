@@ -774,6 +774,7 @@ export default class ClaudianPlugin extends Plugin {
       usage: meta.usage,
       titleGenerationStatus: meta.titleGenerationStatus,
       resumeAtMessageId: meta.resumeAtMessageId,
+      manuallyRenamed: meta.manuallyRenamed,
     };
   }
 
@@ -1217,8 +1218,8 @@ export default class ClaudianPlugin extends Plugin {
     return this.conversationRepository.handleMissingProviderSession(id, missingProviderSessionId);
   }
 
-  async renameConversation(id: string, title: string): Promise<void> {
-    await this.conversationRepository.rename(id, title);
+  async renameConversation(id: string, title: string, options?: { manual?: boolean }): Promise<void> {
+    await this.conversationRepository.rename(id, title, options);
   }
 
   async updateConversation(id: string, updates: Partial<Conversation>): Promise<void> {

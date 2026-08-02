@@ -87,6 +87,8 @@ export interface Conversation {
   enabledMcpServers?: string[];
   /** Assistant checkpoint identifier for resumeAtMessageId after rewind. */
   resumeAtMessageId?: string;
+  /** mazel: true once the user renamed this conversation by hand — /clear inherits the title. */
+  manuallyRenamed?: boolean;
 }
 
 /** Lightweight conversation metadata for the history dropdown. */
@@ -128,6 +130,8 @@ export interface SessionMetadata {
   usage?: UsageInfo;
   /** Assistant checkpoint identifier for resumeAtMessageId after rewind. */
   resumeAtMessageId?: string;
+  /** mazel: true once the user renamed this conversation by hand — /clear inherits the title. */
+  manuallyRenamed?: boolean;
 }
 
 /**

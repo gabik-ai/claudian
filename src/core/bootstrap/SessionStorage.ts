@@ -206,6 +206,7 @@ export class SessionStorage {
       enabledMcpServers: conversation.enabledMcpServers,
       usage: conversation.usage,
       resumeAtMessageId: conversation.resumeAtMessageId,
+      manuallyRenamed: conversation.manuallyRenamed,
     };
   }
 

@@ -122,6 +122,17 @@ export class ConversationController {
    * Entry point is a blank UI state - no conversation is created until the
    * first message is sent. This prevents empty conversations cluttering history.
    */
+  // mazel: /clear should keep a hand-given tab name. Captured here, consumed
+  // by the first message of the next conversation in this tab.
+  private inheritedTitle: string | null = null;
+
+  /** mazel: returns the title to carry over into the next conversation, once. */
+  consumeInheritedTitle(): string | null {
+    const title = this.inheritedTitle;
+    this.inheritedTitle = null;
+    return title;
+  }
+
   async createNew(options: { force?: boolean } = {}): Promise<void> {
     const { plugin, state, subagentManager } = this.deps;
     const force = !!options.force;
@@ -129,6 +140,12 @@ export class ConversationController {
     if (state.isRewinding) return;
     if (state.isCreatingConversation) return;
     if (state.isSwitchingConversation) return;
+
+    // mazel: remember a manually chosen title before the reset wipes the id.
+    if (state.currentConversationId) {
+      const prevConv = plugin.getConversationSync(state.currentConversationId);
+      this.inheritedTitle = prevConv?.manuallyRenamed ? prevConv.title : null;
+    }
 
     // Set flag to block message sending during reset
     state.isCreatingConversation = true;
@@ -602,6 +619,9 @@ export class ConversationController {
   ): void {
     const { plugin, state, renderer } = this.deps;
 
+    // mazel: switching to an existing conversation drops a pending inherited title.
+    this.inheritedTitle = null;
+
     state.currentConversationId = conversation.id;
     state.messages = [...conversation.messages];
     state.usage = conversation.usage ?? null;
@@ -1056,7 +1076,7 @@ export class ConversationController {
     const finishRename = async () => {
       try {
         const newTitle = input.value.trim() || currentTitle;
-        await this.deps.plugin.renameConversation(convId, newTitle);
+        await this.deps.plugin.renameConversation(convId, newTitle, { manual: true });
         this.updateHistoryDropdown();
       } catch {
         new Notice('Failed to rename conversation');

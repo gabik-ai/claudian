@@ -191,11 +191,13 @@ export class ConversationRepository {
     }
   }
 
-  async rename(id: string, title: string): Promise<void> {
+  async rename(id: string, title: string, options?: { manual?: boolean }): Promise<void> {
     const conversation = this.getSync(id);
     if (!conversation) return;
 
     conversation.title = title.trim() || this.generateDefaultTitle();
+    // mazel: remember hand-given names so /clear can carry them over.
+    if (options?.manual) conversation.manuallyRenamed = true;
     conversation.updatedAt = Date.now();
     await this.save(conversation);
   }
