@@ -540,7 +540,11 @@ describe('MessageRenderer', () => {
     renderer.renderStoredMessage(msg);
 
     expect(renderStoredThinkingBlock).toHaveBeenCalled();
-    expect(renderContentSpy).toHaveBeenCalledWith(expect.anything(), 'Text block');
+    expect(renderContentSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      'Text block',
+      { stilFilter: true }
+    );
     // TodoWrite is not rendered inline - only in bottom panel
     expect(renderStoredWriteEdit).toHaveBeenCalled();
     expect(renderStoredToolCall).toHaveBeenCalled();
@@ -621,7 +625,11 @@ describe('MessageRenderer', () => {
 
     // Only the non-empty text block should trigger renderContent
     expect(renderContentSpy).toHaveBeenCalledTimes(1);
-    expect(renderContentSpy).toHaveBeenCalledWith(expect.anything(), 'Real content');
+    expect(renderContentSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      'Real content',
+      { stilFilter: true }
+    );
   });
 
   it('does not render stored Codex write_stdin transport tools', () => {
@@ -819,7 +827,11 @@ describe('MessageRenderer', () => {
     renderer.renderStoredMessage(msg);
 
     // Should render content text
-    expect(renderContentSpy).toHaveBeenCalledWith(expect.anything(), 'Legacy response text');
+    expect(renderContentSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      'Legacy response text',
+      { stilFilter: true }
+    );
     // Should add copy button for fallback text
     expect(addCopySpy).toHaveBeenCalledWith(expect.anything(), 'Legacy response text');
     // Should render tool call
@@ -848,7 +860,11 @@ describe('MessageRenderer', () => {
 
     renderer.renderStoredMessage(msg);
 
-    expect(renderContentSpy).toHaveBeenCalledWith(expect.anything(), 'Only text block persisted');
+    expect(renderContentSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      'Only text block persisted',
+      { stilFilter: true }
+    );
     expect(renderStoredToolCall).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ id: 'read-1', name: 'Read' }),

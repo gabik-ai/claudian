@@ -279,7 +279,8 @@ describe('StreamController - Text Content', () => {
       expect(deps.renderer.renderContent).toHaveBeenCalledTimes(1);
       expect(deps.renderer.renderContent).toHaveBeenCalledWith(
         deps.state.currentTextEl,
-        'Hello World'
+        'Hello World',
+        { stilFilter: true }
       );
     });
 
@@ -294,7 +295,7 @@ describe('StreamController - Text Content', () => {
       expect(deps.renderer.renderContent).toHaveBeenCalledWith(
         deps.state.currentTextEl,
         'Euler: $e^{i\\pi} + 1 = 0$',
-        { deferMath: true }
+        { deferMath: true, stilFilter: true }
       );
     });
 
@@ -309,7 +310,7 @@ describe('StreamController - Text Content', () => {
       expect(deps.renderer.renderContent).toHaveBeenCalledWith(
         deps.state.currentTextEl,
         'Euler: \\(e^{i\\pi} + 1 = 0\\)',
-        { deferMath: true }
+        { deferMath: true, stilFilter: true }
       );
     });
 
@@ -324,7 +325,8 @@ describe('StreamController - Text Content', () => {
 
       expect(deps.renderer.renderContent).toHaveBeenCalledWith(
         deps.state.currentTextEl,
-        'Euler: $e^{i\\pi} + 1 = 0$'
+        'Euler: $e^{i\\pi} + 1 = 0$',
+        { stilFilter: true }
       );
     });
 
@@ -336,7 +338,8 @@ describe('StreamController - Text Content', () => {
 
       expect(deps.renderer.renderContent).toHaveBeenCalledWith(
         expect.anything(),
-        'Hello'
+        'Hello',
+        { stilFilter: true }
       );
       expect(deps.renderer.addTextCopyButton).toHaveBeenCalledWith(
         expect.anything(),
@@ -358,12 +361,13 @@ describe('StreamController - Text Content', () => {
         1,
         expect.anything(),
         'Final $x^2$',
-        { deferMath: true }
+        { deferMath: true, stilFilter: true }
       );
       expect(deps.renderer.renderContent).toHaveBeenNthCalledWith(
         2,
         expect.anything(),
-        'Final $x^2$'
+        'Final $x^2$',
+        { stilFilter: true }
       );
       expect(deps.renderer.addTextCopyButton).toHaveBeenCalledWith(
         expect.anything(),

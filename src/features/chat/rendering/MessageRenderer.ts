@@ -25,6 +25,9 @@ import {
   escapeMathDelimitersForStreaming,
   normalizeLatexMathDelimiters,
 } from '../../../utils/markdownMath';
+// Mazel M10: derselbe Filter wie der MessageDisplay-Hook der CLI, hier zusätzlich
+// für Historie und Kopieren.
+import { applyStilFilter } from '../../../utils/stilFilter';
 import type { FeatureHost } from '../../FeatureHost';
 import { findRewindContext } from '../rewind';
 import { formatConversationDirectoryTitle } from '../utils/conversationDirectoryTitle';
@@ -40,6 +43,13 @@ import { renderStoredWriteEdit } from './WriteEditRenderer';
 
 export interface RenderContentOptions {
   deferMath?: boolean;
+  /**
+   * Mazel M10: schaltet den deterministischen Stil-Filter ein. Standard ist AUS.
+   * Nur Assistenten-Antworttext wird gefiltert. Nutzer-Eingaben, Thinking-Blöcke,
+   * Plan-Inhalte und Tool-Ausgaben laufen ungefiltert durch, sonst würde ein
+   * selbst getippter Gedankenstrich oder ein Dateiinhalt verändert angezeigt.
+   */
+  stilFilter?: boolean;
 }
 
 export type RenderContentFn = (
@@ -385,7 +395,8 @@ export class MessageRenderer {
             continue;
           }
           const textEl = contentEl.createDiv({ cls: 'claudian-text-block' });
-          void this.renderContent(textEl, normalized.content);
+          // Mazel M10: Historien-Pfad, Assistenten-Antworttext.
+          void this.renderContent(textEl, normalized.content, { stilFilter: true });
           this.addTextCopyButton(textEl, normalized.content);
         } else if (block.type === 'tool_use') {
           const toolCall = msg.toolCalls?.find(tc => tc.id === block.toolId);
@@ -425,7 +436,8 @@ export class MessageRenderer {
         hadLegacyInterruptIndicator ||= normalized.interrupted;
         if (normalized.content.trim()) {
           const textEl = contentEl.createDiv({ cls: 'claudian-text-block' });
-          void this.renderContent(textEl, normalized.content);
+          // Mazel M10: Historien-Pfad ohne contentBlocks, ebenfalls Assistententext.
+          void this.renderContent(textEl, normalized.content, { stilFilter: true });
           this.addTextCopyButton(textEl, normalized.content);
         }
       }
@@ -720,7 +732,11 @@ export class MessageRenderer {
     el.empty();
 
     try {
-      const normalizedMarkdown = normalizeLatexMathDelimiters(markdown);
+      // Mazel M10: nur auf ausdrücklichen Wunsch, und den äußern allein die
+      // Aufrufstellen mit Assistenten-Antworttext. Der Filter ist idempotent,
+      // ein erneutes Rendern ändert also nichts mehr.
+      const styledMarkdown = options?.stilFilter ? applyStilFilter(markdown) : markdown;
+      const normalizedMarkdown = normalizeLatexMathDelimiters(styledMarkdown);
       const renderMarkdown = options?.deferMath
         ? escapeMathDelimitersForStreaming(normalizedMarkdown)
         : normalizedMarkdown;
@@ -807,8 +823,14 @@ export class MessageRenderer {
    * Button shows clipboard icon on hover, changes to "copied!" on click.
    * @param textEl The rendered text element
    * @param markdown The original markdown content to copy
+   * @param stilFilter Mazel M10: kopiert den gefilterten Text, damit Anzeige und
+   *   Zwischenablage übereinstimmen. Der Standard ist `true`, weil dieser Knopf
+   *   ausschließlich an Assistenten-Textblöcken hängt (drei Aufrufstellen, alle
+   *   mit `stilFilter: true` gerendert). Nutzer-Nachrichten tragen den eigenen
+   *   `addUserCopyButton`. Wer den Knopf einmal an ungefilterten Text hängt,
+   *   setzt hier `false` und kopiert dann das Original.
    */
-  addTextCopyButton(textEl: HTMLElement, markdown: string): void {
+  addTextCopyButton(textEl: HTMLElement, markdown: string, stilFilter = true): void {
     const copyBtn = textEl.createSpan({ cls: 'claudian-text-copy-btn' });
     setIcon(copyBtn, 'copy');
 
@@ -819,7 +841,11 @@ export class MessageRenderer {
       runRendererAction(async () => {
 
         try {
-          await navigator.clipboard.writeText(markdown);
+          // Mazel M10: kopiert wird, was auch angezeigt wird, sonst laufen
+          // Anzeige und Zwischenablage auseinander.
+          await navigator.clipboard.writeText(
+            stilFilter ? applyStilFilter(markdown) : markdown
+          );
         } catch {
           // Clipboard API may fail in non-secure contexts
           return;

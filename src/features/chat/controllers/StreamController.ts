@@ -1102,7 +1102,12 @@ export class StreamController {
         && this.shouldDeferMathRendering()
         && hasStreamingMathDelimiters(state.currentTextContent)
       ) {
-        await renderer.renderContent(state.currentTextEl, state.currentTextContent);
+        // Mazel M10: Live-Pfad, Assistenten-Antworttext.
+        await renderer.renderContent(
+          state.currentTextEl,
+          state.currentTextContent,
+          { stilFilter: true }
+        );
       }
       msg.contentBlocks = msg.contentBlocks || [];
       msg.contentBlocks.push({ type: 'text', content: state.currentTextContent });
@@ -1155,12 +1160,9 @@ export class StreamController {
 
     try {
       if (textEl) {
+        // Mazel M10: Live-Pfad des Antworttextes, deshalb mit Stil-Filter.
         const options = this.getStreamingRenderOptions(content);
-        if (options) {
-          await renderer.renderContent(textEl, content, options);
-        } else {
-          await renderer.renderContent(textEl, content);
-        }
+        await renderer.renderContent(textEl, content, { ...options, stilFilter: true });
         this.scrollToBottom();
       }
     } catch {
