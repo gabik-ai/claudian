@@ -1222,6 +1222,11 @@ export default class ClaudianPlugin extends Plugin {
     await this.conversationRepository.rename(id, title, options);
   }
 
+  // mazel: drops the "named by hand" marker; the title itself stays.
+  async clearManualRename(id: string): Promise<void> {
+    await this.conversationRepository.clearManualRename(id);
+  }
+
   async updateConversation(id: string, updates: Partial<Conversation>): Promise<void> {
     await this.conversationRepository.update(id, updates);
   }

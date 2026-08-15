@@ -73,6 +73,9 @@ jest.mock('@/features/chat/tabs/Tab', () => ({
   recycleTabRuntime: (...args: any[]) => mockRecycleTabRuntime(...args),
   wireTabInputEvents: (...args: any[]) => mockWireTabInputEvents(...args),
   getTabTitle: (...args: any[]) => mockGetTabTitle(...args),
+  setTabPendingTitle: (tab: any, title: string | null) => {
+    tab.pendingTitle = title;
+  },
 }));
 
 jest.mock('@/core/providers/ProviderRegistry', () => ({

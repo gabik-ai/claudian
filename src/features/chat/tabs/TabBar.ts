@@ -29,19 +29,22 @@ export interface TabBarCallbacks {
    * mazel: called when the user renames a tab inline.
    *
    * The title lives on the conversation, so the host maps this onto
-   * plugin.renameConversation(). Upstream's auto-title generator already
-   * refuses to overwrite a manual rename, so nothing extra is needed to
-   * protect the new name.
+   * plugin.renameConversation() — or, on a tab that has no conversation yet,
+   * parks it as the tab's pending name. Upstream's auto-title generator
+   * already refuses to overwrite a manual rename, so nothing extra is needed
+   * to protect the new name. Fired on every non-empty commit, including an
+   * unchanged one: confirming the name you already see is the deliberate act
+   * that pins it.
    */
   onTabRename?: (tabId: TabId, title: string) => void;
 
   /**
-   * mazel: called when the set of user-named conversations changes, so the host
-   * can persist it. Without persistence the badge falls back to its number
-   * after a restart while the conversation keeps the name — the two would
-   * disagree, and the name would look lost.
+   * mazel: called when the user empties the field — "take the name away
+   * again". The host clears the conversation's manuallyRenamed marker (or the
+   * tab's pending name); the badge falls back to its number on the next
+   * update.
    */
-  onUserNamedConversationsChanged?: (conversationIds: string[]) => void;
+  onTabRenameCleared?: (tabId: TabId) => void;
 
   /**
    * mazel: called when a badge is dropped on another one. The dragged tab is
@@ -61,8 +64,6 @@ export class TabBar {
   private renamingTabId: TabId | null = null;
   /** mazel: items that arrived while a rename was in progress. */
   private deferredItems: TabBarItem[] | null = null;
-  /** mazel: conversations the user named by hand. Keyed on the conversation, not the tab. */
-  private userNamedConversationIds = new Set<string>();
   /** mazel: a tab switch held back to see whether a dblclick follows. */
   private pendingClickTimer: number | null = null;
   /** mazel: the badge currently being dragged, if any. */
@@ -258,7 +259,6 @@ export class TabBar {
     this.renamingTabId = null;
     this.deferredItems = null;
     this.clearPendingClick();
-    this.userNamedConversationIds.clear();
     this.stableTabNumbers.clear();
     this.draggedTabId = null;
     this.lastKnownScrollLeft = 0;
@@ -303,21 +303,6 @@ export class TabBar {
     if (this.pendingClickTimer === null) return;
     window.clearTimeout(this.pendingClickTimer);
     this.pendingClickTimer = null;
-  }
-
-  /**
-   * mazel: the conversations the user has named by hand.
-   *
-   * Kept separate from upstream's expandedTitleTabIds on purpose. That set is
-   * keyed on the tab and holds a view state; this one is keyed on the
-   * conversation and holds an intent that has to outlive the tab.
-   */
-  getUserNamedConversationIds(): string[] {
-    return Array.from(this.userNamedConversationIds);
-  }
-
-  setUserNamedConversationIds(conversationIds: readonly string[]): void {
-    this.userNamedConversationIds = new Set(conversationIds);
   }
 
   /**
@@ -378,31 +363,28 @@ export class TabBar {
       // mazel: an empty field is not a cancel, it is "drop the name I gave
       // this". The badge goes back to its number. The CONVERSATION title stays
       // exactly as it was — clearing it too would leave a nameless entry in the
-      // history list, which is the opposite of what the name was for.
+      // history list, which is the opposite of what the name was for. The host
+      // owns the marker (manuallyRenamed / pending name), so it is told and
+      // the item is only adjusted for the immediate repaint.
       if (nextTitle.length === 0) {
-        if (item.conversationId !== null) {
-          this.userNamedConversationIds.delete(item.conversationId);
-        }
+        const hadName = item.userNamed;
+        item.userNamed = false;
         badgeEl.textContent = this.getBadgeLabel(item);
-        this.callbacks.onUserNamedConversationsChanged?.(this.getUserNamedConversationIds());
+        if (hadName) this.callbacks.onTabRenameCleared?.(item.id);
         if (replay) this.update(replay);
         return;
       }
 
-      // mazel: an unchanged name still marks the tab as user-named. Confirming
-      // the name you already see is a deliberate act, and on a tab that was
-      // never named it is the only way to pin the current auto-title.
-      if (item.conversationId !== null) {
-        this.userNamedConversationIds.add(item.conversationId);
-      }
-
+      // mazel: every non-empty commit is reported, including an unchanged one.
+      // Confirming the name you already see is a deliberate act, and on a tab
+      // that was never named it is the only way to pin the current auto-title.
+      // The item is patched locally so the badge is right before the host's
+      // refresh arrives; the truth itself lives with the host.
+      item.userNamed = true;
       item.title = nextTitle;
       badgeEl.setAttribute('aria-label', nextTitle);
       badgeEl.textContent = this.getBadgeLabel(item);
-      this.callbacks.onUserNamedConversationsChanged?.(this.getUserNamedConversationIds());
-      if (nextTitle !== originalTitle) {
-        this.callbacks.onTabRename?.(item.id, nextTitle);
-      }
+      this.callbacks.onTabRename?.(item.id, nextTitle);
       if (replay) this.update(replay);
     };
 
@@ -498,10 +480,11 @@ export class TabBar {
     }
   }
 
-  /** mazel: true if the user gave this tab's conversation a name by hand. */
+  /** mazel: true if the user gave this tab a name by hand. Computed upstream
+   * of the bar (TabManager reads the conversation's manuallyRenamed flag), so
+   * the bar holds no name state of its own. */
   private isUserNamed(item: TabBarItem): boolean {
-    return item.conversationId !== null
-      && this.userNamedConversationIds.has(item.conversationId);
+    return item.userNamed;
   }
 
   private truncateExpandedTitle(title: string): string {

@@ -20,17 +20,22 @@
  * toggle and are deleted rather than bent into shape. A test that is kept
  * green after its behaviour was removed on purpose is worse than no test.
  *
- * Why the marker hangs on the conversation, not on the tab
- * -------------------------------------------------------
+ * Where the "named by hand" truth lives, re-decided 2026-08-15
+ * -----------------------------------------------------------
  * A badge shows its NUMBER unless the user named it by hand; only then does it
- * show the name. The "named by hand" marker is a set of **conversation** ids
- * (`userNamedConversationIds`), never tab ids. Tab ids are handed out fresh
- * every time a conversation is reopened from history, so a tab-keyed marker
- * would drop the name at exactly the moment the user goes looking for it:
- * close the tab, reopen the conversation, and the name they chose is gone.
- * Upstream's `expandedTitleTabIds` stays tab-keyed on purpose — it holds a
- * view state that is allowed to die with the tab; ours holds an intent that
- * must not.
+ * show the name. The marker used to be a set of conversation ids inside the
+ * bar (`userNamedConversationIds`), persisted separately — a second truth next
+ * to the conversation's own `manuallyRenamed` flag, and the two drifted: after
+ * /clear the inherited rename set `manuallyRenamed` on the NEW conversation,
+ * the set still held the OLD id, and the badge fell back to its number even
+ * though the name had been carried over correctly.
+ *
+ * Now the bar holds no name state at all. `TabBarItem.userNamed` is computed
+ * by the TabManager from the conversation's `manuallyRenamed` flag (plus the
+ * tab's pendingTitle while no conversation exists), and the bar merely
+ * displays it. One truth, no drift. The bar reports intent upward via
+ * onTabRename / onTabRenameCleared and patches its local item only for the
+ * immediate repaint.
  *
  * Why a single click waits 220 ms
  * -------------------------------
@@ -55,7 +60,7 @@ function createCallbacks(overrides: Partial<TabBarCallbacks> = {}): TabBarCallba
     onNewTab: jest.fn(),
     onTitleExpansionChanged: jest.fn(),
     onTabRename: jest.fn(),
-    onUserNamedConversationsChanged: jest.fn(),
+    onTabRenameCleared: jest.fn(),
     ...overrides,
   };
 }
@@ -64,7 +69,7 @@ function createItem(overrides: Partial<TabBarItem> = {}): TabBarItem {
   return {
     id: 'tab-1',
     index: 1,
-    conversationId: 'conv-1',
+    userNamed: false,
     title: 'Test Tab',
     providerId: 'claude',
     isActive: false,
@@ -82,12 +87,11 @@ interface Harness {
   item: TabBarItem;
 }
 
-function setup(itemOverrides: Partial<TabBarItem> = {}, userNamedConversationIds: string[] = []): Harness {
+function setup(itemOverrides: Partial<TabBarItem> = {}): Harness {
   const containerEl = createMockEl();
   const callbacks = createCallbacks();
   const bar = new TabBar(containerEl, callbacks);
   const item = createItem(itemOverrides);
-  bar.setUserNamedConversationIds(userNamedConversationIds);
   bar.update([item]);
   return { bar, containerEl, callbacks, item };
 }
@@ -118,12 +122,12 @@ function dblclick(h: Harness, event: Record<string, unknown> = {}): void {
 
 describe('mazel: the dblclick gesture belongs to the rename', () => {
   it('a plain dblclick starts the rename with an EMPTY field on an unnamed tab', () => {
-    // Geaendert am 2026-07-27. Vorher oeffnete das Feld mit `item.title`, und
+    // Geändert am 2026-07-27. Vorher öffnete das Feld mit `item.title`, und
     // das ist bei einem unbenannten Tab der Auto-Titel des Modells, also ein
     // ganzer Satz ("Implement Vault Context Diet Phase A"). Ein Doppelklick auf
     // eine Ziffer erzeugte damit einen langen Namen, den niemand verlangt hat,
-    // und die erste Taste musste ihn erst wegloeschen.
-    // Die Vorfassung im Vault fuellte `currentLabel || ''` (ui-fixes.js Fix 5,
+    // und die erste Taste musste ihn erst weglöschen.
+    // Die Vorfassung im Vault füllte `currentLabel || ''` (ui-fixes.js Fix 5,
     // `input.value` in Zeile 407) — leer, wenn es keinen eigenen Namen gab.
     const h = setup();
 
@@ -135,13 +139,11 @@ describe('mazel: the dblclick gesture belongs to the rename', () => {
   });
 
   it('a dblclick on a tab the user DID name opens with that name, ready to edit', () => {
-    // Gegenstueck zum Test darueber, sonst beweist "leer" nichts: die
+    // Gegenstück zum Test darüber, sonst beweist "leer" nichts: die
     // Vorbelegung darf nicht generell weg sein, sie darf nur den Auto-Titel
     // nicht mehr einsetzen. Einen selbst gegebenen Namen zu korrigieren, ohne
-    // ihn neu tippen zu muessen, ist der Normalfall.
-    const h = setup();
-    h.bar.setUserNamedConversationIds(['conv-1']);
-    h.bar.update([h.item]);
+    // ihn neu tippen zu müssen, ist der Normalfall.
+    const h = setup({ userNamed: true });
 
     dblclick(h);
 
@@ -228,60 +230,44 @@ describe('mazel: the badge shows a number unless the user named it', () => {
     const unnamed = setup({ index: 3, title: 'Auto-generated title' });
     expect(badge(unnamed).textContent).toBe('3');
 
-    const named = setup({ index: 3, title: 'Chosen by hand' }, ['conv-1']);
+    const named = setup({ index: 3, title: 'Chosen by hand', userNamed: true });
     expect(badge(named).textContent).toBe('Chosen by hand');
   });
 
-  it('the name follows the CONVERSATION, so reopening it under a new tab id keeps it', () => {
-    // The core of the design. A tab reopened from history gets a fresh tab id;
-    // a tab-keyed marker would lose the name at exactly that moment.
-    const h = setup({ id: 'tab-1', index: 1, title: 'Chosen by hand' }, ['conv-1']);
+  it('the bar holds no name state — userNamed on the item is the whole truth', () => {
+    // The core of the redesign. The old bar kept its own set of "named"
+    // conversation ids; after /clear the set still held the OLD conversation
+    // id while the name had moved to the NEW one, and the badge fell back to
+    // its number. Now the item says userNamed and the badge follows, whoever
+    // computed it and whatever conversation is behind it.
+    const h = setup({ id: 'tab-1', index: 1, title: 'Chosen by hand', userNamed: true });
     expect(badge(h).textContent).toBe('Chosen by hand');
 
+    // Same tab, new conversation behind it (as after /clear + first message):
+    // the manager recomputes userNamed from the new conversation, the bar
+    // simply renders what it is told.
     h.bar.update([
-      createItem({ id: 'tab-99', index: 7, conversationId: 'conv-1', title: 'Chosen by hand' }),
+      createItem({ id: 'tab-1', index: 1, title: 'Chosen by hand', userNamed: true }),
     ]);
-
     expect(badge(h).textContent).toBe('Chosen by hand');
+
+    // And when the truth says the name is gone, the number comes back.
+    h.bar.update([
+      createItem({ id: 'tab-1', index: 1, title: 'Auto title', userNamed: false }),
+    ]);
+    expect(badge(h).textContent).toBe('1');
   });
 
-  it('a different conversation in the same session keeps its number', () => {
-    const h = setup({ index: 1, title: 'Chosen by hand' }, ['conv-1']);
+  it('a named tab does not infect its neighbours', () => {
+    const h = setup({ index: 1, title: 'Chosen by hand', userNamed: true });
 
     h.bar.update([
-      createItem({ id: 'tab-1', index: 1, conversationId: 'conv-1', title: 'Chosen by hand' }),
-      createItem({ id: 'tab-2', index: 2, conversationId: 'conv-2', title: 'Auto title' }),
+      createItem({ id: 'tab-1', index: 1, title: 'Chosen by hand', userNamed: true }),
+      createItem({ id: 'tab-2', index: 2, title: 'Auto title' }),
     ]);
 
     expect(badge(h, 0).textContent).toBe('Chosen by hand');
     expect(badge(h, 1).textContent).toBe('2');
-  });
-
-  it('a tab without a conversation falls back to its number and does not throw', () => {
-    // A blank tab has no conversation to hang a name on. It must render, and
-    // renaming it must not blow up on the null.
-    const h = setup({ index: 4, conversationId: null, title: 'Blank tab' }, ['conv-1']);
-
-    expect(badge(h).textContent).toBe('4');
-
-    expect(() => {
-      dblclick(h);
-      badge(h).textContent = 'Named anyway';
-      fire(badge(h), 'keydown', { key: 'Enter' });
-    }).not.toThrow();
-
-    expect(h.bar.getUserNamedConversationIds()).toEqual(['conv-1']);
-    expect(badge(h).textContent).toBe('4');
-  });
-
-  it('round-trips the marker set for persistence', () => {
-    // The host persists this between restarts. If it did not, the badge would
-    // fall back to its number while the conversation kept the name.
-    const h = setup();
-
-    h.bar.setUserNamedConversationIds(['conv-a', 'conv-b']);
-
-    expect(h.bar.getUserNamedConversationIds()).toEqual(['conv-a', 'conv-b']);
   });
 });
 
@@ -303,16 +289,33 @@ describe('mazel: inline rename', () => {
     expect(badge(h).getAttribute('aria-label')).toBe('Renamed tab');
   });
 
-  it('a commit marks the conversation as user-named, so the badge keeps showing it', () => {
+  it('a commit shows the name immediately, before the host refresh arrives', () => {
+    // The truth lives with the host (manuallyRenamed / pendingTitle), but the
+    // repaint must not wait for the round trip: the bar patches its local item
+    // and the badge shows the name in the same tick.
     const h = setup();
     startRename(h);
 
     badge(h).textContent = 'Renamed tab';
     fire(badge(h), 'keydown', { key: 'Enter' });
 
-    expect(h.callbacks.onUserNamedConversationsChanged).toHaveBeenCalledWith(['conv-1']);
-    expect(h.bar.getUserNamedConversationIds()).toEqual(['conv-1']);
     expect(badge(h).textContent).toBe('Renamed tab');
+    expect(h.item.userNamed).toBe(true);
+  });
+
+  it('renaming a tab WITHOUT a conversation works the same way', () => {
+    // The old design silently dropped this rename (`if (!conversationId)
+    // return`) — the user typed a name, hit Enter, and the number came back.
+    // Now the bar reports it like any other rename and the host parks it as
+    // the tab's pending name until the conversation exists.
+    const h = setup({ index: 4, title: 'New Chat' });
+
+    dblclick(h);
+    badge(h).textContent = 'Named before first message';
+    fire(badge(h), 'keydown', { key: 'Enter' });
+
+    expect(h.callbacks.onTabRename).toHaveBeenCalledWith('tab-1', 'Named before first message');
+    expect(badge(h).textContent).toBe('Named before first message');
   });
 
   it('Escape reverts and reports nothing', () => {
@@ -323,7 +326,7 @@ describe('mazel: inline rename', () => {
     fire(badge(h), 'keydown', { key: 'Escape' });
 
     expect(h.callbacks.onTabRename).not.toHaveBeenCalled();
-    expect(h.callbacks.onUserNamedConversationsChanged).not.toHaveBeenCalled();
+    expect(h.callbacks.onTabRenameCleared).not.toHaveBeenCalled();
     expect(h.bar.isRenaming()).toBe(false);
     // A tab that was never named goes back to its NUMBER, not to its title.
     // Reverting has to undo the editor completely, including the widened label.
@@ -340,56 +343,56 @@ describe('mazel: inline rename', () => {
     expect(h.callbacks.onTabRename).toHaveBeenCalledWith('tab-1', 'Committed on blur');
   });
 
-  it('an empty name drops the user-given name without touching the conversation title', () => {
+  it('an empty name drops the user-given name and tells the host', () => {
     // Emptying the field means "take the name away again", not "cancel".
-    // The badge goes back to its number and the marker is cleared — but the
-    // CONVERSATION title stays as it was, otherwise the history list would be
-    // left with a nameless entry, which is the opposite of what a name is for.
-    const h = setup({ title: 'Chosen by hand' }, ['conv-1']);
+    // The badge goes back to its number; the host clears the marker
+    // (manuallyRenamed / pendingTitle). The CONVERSATION title stays as it
+    // was, otherwise the history list would be left with a nameless entry,
+    // which is the opposite of what a name is for — that restraint lives in
+    // clearManualRename, which never touches the title.
+    const h = setup({ title: 'Chosen by hand', userNamed: true });
     startRename(h);
 
     badge(h).textContent = '   ';
     fire(badge(h), 'keydown', { key: 'Enter' });
 
     expect(h.callbacks.onTabRename).not.toHaveBeenCalled();
+    expect(h.callbacks.onTabRenameCleared).toHaveBeenCalledWith('tab-1');
     expect(badge(h).textContent).toBe('1');
-    expect(h.callbacks.onUserNamedConversationsChanged).toHaveBeenCalledWith([]);
-    expect(h.bar.getUserNamedConversationIds()).not.toContain('conv-1');
     expect(h.item.title).toBe('Chosen by hand');
   });
 
-  it('confirming the empty field on a never-named tab pins nothing', () => {
+  it('confirming the empty field on a never-named tab pins nothing and clears nothing', () => {
     // Umgeschrieben am 2026-07-27, zusammen mit der leeren Vorbelegung.
     //
-    // Vorher hiess dieser Test "pinnt trotzdem den Namen": das Feld oeffnete
-    // mit dem Auto-Titel, Enter bestaetigte ihn, und der Tab trug ab da einen
+    // Vorher hieß dieser Test "pinnt trotzdem den Namen": das Feld öffnete
+    // mit dem Auto-Titel, Enter bestätigte ihn, und der Tab trug ab da einen
     // Satz als Namen. Das war der letzte Weg, auf dem ein Auto-Titel dauerhaft
     // ins Badge kam — und damit genau das, was am 2026-07-27 weg sollte.
-    // Jetzt ist Enter auf dem leeren Feld ein Nicht-Ereignis: die Ziffer bleibt.
+    // Jetzt ist Enter auf dem leeren Feld ein Nicht-Ereignis: die Ziffer
+    // bleibt, und der Host wird nicht mit einem Clear behelligt, das nichts
+    // zu tun hätte.
     const h = setup();
     startRename(h);
 
     fire(badge(h), 'keydown', { key: 'Enter' });
 
     expect(h.callbacks.onTabRename).not.toHaveBeenCalled();
-    expect(h.bar.getUserNamedConversationIds()).not.toContain('conv-1');
+    expect(h.callbacks.onTabRenameCleared).not.toHaveBeenCalled();
     expect(badge(h).textContent).toBe('1');
   });
 
-  it('confirming an unchanged name on a NAMED tab keeps it and fires no rename', () => {
-    // Negativ-Kontrolle: das Bestaetigen darf nicht generell wirkungslos sein.
-    // Wer einen eigenen Namen hat, das Feld oeffnet und Enter drueckt, behaelt
-    // ihn — ohne dass ein Umbenennen nach oben gemeldet wird, denn es hat sich
-    // nichts geaendert.
-    const h = setup();
-    h.bar.setUserNamedConversationIds(['conv-1']);
-    h.bar.update([h.item]);
+  it('confirming an unchanged name on a NAMED tab re-reports it — pinning is a commit', () => {
+    // Geändert am 2026-08-15. Vorher wurde ein unveränderter Name NICHT
+    // gemeldet; das Pinnen lief über die bar-eigene Set. Die Set ist weg,
+    // also ist der Report der einzige Weg, die Absicht beim Host ankommen zu
+    // lassen — renameConversation mit unverändertem Titel ist idempotent.
+    const h = setup({ userNamed: true });
     dblclick(h);
 
     fire(badge(h), 'keydown', { key: 'Enter' });
 
-    expect(h.callbacks.onTabRename).not.toHaveBeenCalled();
-    expect(h.bar.getUserNamedConversationIds()).toContain('conv-1');
+    expect(h.callbacks.onTabRename).toHaveBeenCalledWith('tab-1', 'Test Tab');
     expect(badge(h).textContent).toBe('Test Tab');
   });
 
@@ -497,13 +500,11 @@ describe('obsolescence guard: tab rename', () => {
     expect(upstream).not.toContain('setTimeout');
   });
 
-  it('upstream still ships a TabBarItem that knows nothing about its conversation', () => {
+  it('upstream still ships a TabBarItem that knows nothing about user naming', () => {
     const upstreamTypes = readUpstreamFile('src/features/chat/tabs/types.ts');
     if (upstreamTypes === null) return;
 
-    // Scoped to the interface on purpose: `conversationId` appears all over
-    // this file (TabData, PersistedTabState, callbacks). Only its absence on
-    // TabBarItem is the fact we depend on.
+    // Scoped to the interface on purpose: only TabBarItem carries our field.
     const tabBarItem = upstreamTypes.match(/export interface TabBarItem \{[\s\S]*?\n\}/)?.[0];
 
     // Red = the interface was renamed or restructured; our added field has to
@@ -513,6 +514,10 @@ describe('obsolescence guard: tab rename', () => {
     // The field is ours. If upstream adds one of the same name with different
     // semantics, the two merge silently and the badge starts keying on
     // somebody else's value.
-    expect(tabBarItem).not.toContain('conversationId');
+    expect(tabBarItem).not.toContain('userNamed');
+
+    // And upstream's TabData knows no pendingTitle — ours parks a user-given
+    // name there while the tab has no conversation.
+    expect(upstreamTypes).not.toContain('pendingTitle');
   });
 });

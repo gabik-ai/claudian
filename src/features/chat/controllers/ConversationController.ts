@@ -49,6 +49,11 @@ export interface ConversationCallbacks {
 export interface ConversationControllerDeps {
   plugin: FeatureHost;
   state: ChatState;
+  /**
+   * mazel: parks a user-given name on the tab while no conversation exists
+   * (after /clear, or on a never-used tab). Null clears it.
+   */
+  setPendingTitle?: (title: string | null) => void;
   renderer: MessageRenderer;
   subagentManager: SubagentManager;
   getHistoryDropdown: () => HTMLElement | null;
@@ -122,17 +127,6 @@ export class ConversationController {
    * Entry point is a blank UI state - no conversation is created until the
    * first message is sent. This prevents empty conversations cluttering history.
    */
-  // mazel: /clear should keep a hand-given tab name. Captured here, consumed
-  // by the first message of the next conversation in this tab.
-  private inheritedTitle: string | null = null;
-
-  /** mazel: returns the title to carry over into the next conversation, once. */
-  consumeInheritedTitle(): string | null {
-    const title = this.inheritedTitle;
-    this.inheritedTitle = null;
-    return title;
-  }
-
   async createNew(options: { force?: boolean } = {}): Promise<void> {
     const { plugin, state, subagentManager } = this.deps;
     const force = !!options.force;
@@ -142,9 +136,12 @@ export class ConversationController {
     if (state.isSwitchingConversation) return;
 
     // mazel: remember a manually chosen title before the reset wipes the id.
+    // Parked on the TAB (pendingTitle), not in this controller: the badge has
+    // to keep showing the name during the gap between /clear and the first
+    // message, and the tab is the only thing that exists across that gap.
     if (state.currentConversationId) {
       const prevConv = plugin.getConversationSync(state.currentConversationId);
-      this.inheritedTitle = prevConv?.manuallyRenamed ? prevConv.title : null;
+      this.deps.setPendingTitle?.(prevConv?.manuallyRenamed ? prevConv.title : null);
     }
 
     // Set flag to block message sending during reset
@@ -620,7 +617,7 @@ export class ConversationController {
     const { plugin, state, renderer } = this.deps;
 
     // mazel: switching to an existing conversation drops a pending inherited title.
-    this.inheritedTitle = null;
+    this.deps.setPendingTitle?.(null);
 
     state.currentConversationId = conversation.id;
     state.messages = [...conversation.messages];

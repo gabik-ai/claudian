@@ -333,11 +333,18 @@ export class ClaudianView extends ItemView {
       },
       onTitleExpansionChanged: () => this.persistTabState(),
       // mazel: the tab title lives on its conversation, so an inline rename
-      // maps straight onto renameConversation(). A blank tab has no
-      // conversation yet and is simply skipped.
+      // maps straight onto renameConversation() — manuallyRenamed doubles as
+      // the "named by hand" marker the badge reads. A blank tab has no
+      // conversation yet, so the name is parked on the tab and applied the
+      // moment its conversation is created.
       onTabRename: (tabId, title) => {
         const tab = this.tabManager?.getTab(tabId);
-        if (!tab?.conversationId) return;
+        if (!tab) return;
+        if (!tab.conversationId) {
+          this.tabManager?.setTabPendingTitle(tabId, title);
+          this.updateTabBar();
+          return;
+        }
         void this.plugin.renameConversation(tab.conversationId, title, { manual: true })
           .then(() => {
             this.updateTabBar();
@@ -345,10 +352,21 @@ export class ClaudianView extends ItemView {
           })
           .catch(() => new Notice('Failed to rename tab'));
       },
-      // mazel: the marker "this conversation carries a name the user chose" is
-      // what makes the badge show the name instead of its number, so it has to
-      // be written out as soon as it changes.
-      onUserNamedConversationsChanged: () => this.persistTabState(),
+      // mazel: emptying the field takes the name away again. The marker lives
+      // on the conversation (or, for a blank tab, on the tab itself), never in
+      // the bar.
+      onTabRenameCleared: (tabId) => {
+        const tab = this.tabManager?.getTab(tabId);
+        if (!tab) return;
+        if (!tab.conversationId) {
+          this.tabManager?.setTabPendingTitle(tabId, null);
+          this.updateTabBar();
+          return;
+        }
+        void this.plugin.clearManualRename(tab.conversationId)
+          .then(() => this.updateTabBar())
+          .catch(() => new Notice('Failed to rename tab'));
+      },
       // mazel: the tab order IS the order of the manager's map, so reordering
       // is a manager concern; the bar only reports the gesture.
       onTabReorder: (fromTabId, toTabId) => {
@@ -792,9 +810,9 @@ export class ClaudianView extends ItemView {
         StartupProfiler.recordCount('restored-tab-count', persistedState.openTabs.length);
         await StartupProfiler.runAsync('tab-restore-internal', () => this.tabManager!.restoreState(persistedState));
         this.tabBar?.setExpandedTitleTabIds(persistedState.expandedTitleTabIds ?? []);
-        // mazel: restore the names the user gave, so a renamed tab still shows
-        // its name after a restart instead of falling back to its number.
-        this.tabBar?.setUserNamedConversationIds(persistedState.userNamedConversationIds ?? []);
+        // mazel: no name state to restore here — "named by hand" is read off
+        // each conversation's manuallyRenamed flag, which lives in the session
+        // file and survives the restart on its own.
         this.updateTabBar();
         return;
       }
@@ -828,15 +846,9 @@ export class ClaudianView extends ItemView {
     const expandedTitleTabIds = (this.tabBar?.getExpandedTitleTabIds() ?? [])
       .filter(tabId => openTabIds.has(tabId));
 
-    // mazel: NOT filtered against the open tabs, unlike expandedTitleTabIds
-    // above. A name has to outlive its tab, otherwise closing the tab erases
-    // exactly the label the user needs to find the conversation again.
-    const userNamedConversationIds = this.tabBar?.getUserNamedConversationIds() ?? [];
-
     return {
       ...state,
       ...(expandedTitleTabIds.length > 0 ? { expandedTitleTabIds } : {}),
-      ...(userNamedConversationIds.length > 0 ? { userNamedConversationIds } : {}),
     };
   }
 

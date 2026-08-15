@@ -54,6 +54,8 @@ export interface FeatureHost {
     missingProviderSessionId?: string,
   ): Promise<'deleted' | 'reset' | 'preserved' | 'not_found'>;
   renameConversation(id: string, title: string, options?: { manual?: boolean }): Promise<void>;
+  /** mazel: drops the "named by hand" marker; the title itself stays. */
+  clearManualRename(id: string): Promise<void>;
   updateConversation(id: string, updates: Partial<Conversation>): Promise<void>;
   getConversationById(id: string): Promise<Conversation | null>;
   getCachedConversation(id: string): Conversation | null;

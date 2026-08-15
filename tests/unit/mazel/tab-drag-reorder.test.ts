@@ -84,6 +84,9 @@ jest.mock('@/features/chat/tabs/Tab', () => ({
   recycleTabRuntime: (...args: any[]) => mockRecycleTabRuntime(...args),
   wireTabInputEvents: (...args: any[]) => mockWireTabInputEvents(...args),
   getTabTitle: (...args: any[]) => mockGetTabTitle(...args),
+  setTabPendingTitle: (tab: any, title: string | null) => {
+    tab.pendingTitle = title;
+  },
 }));
 
 jest.mock('@/core/providers/ProviderRegistry', () => ({
@@ -135,7 +138,6 @@ function createCallbacks(overrides: Partial<TabBarCallbacks> = {}): TabBarCallba
     onNewTab: jest.fn(),
     onTitleExpansionChanged: jest.fn(),
     onTabRename: jest.fn(),
-    onUserNamedConversationsChanged: jest.fn(),
     onTabReorder: jest.fn(),
     ...overrides,
   };
@@ -145,7 +147,7 @@ function createItem(overrides: Partial<TabBarItem> = {}): TabBarItem {
   return {
     id: 'tab-a',
     index: 1,
-    conversationId: 'conv-a',
+    userNamed: false,
     title: 'Test Tab',
     providerId: 'claude',
     isActive: false,
@@ -159,9 +161,9 @@ function createItem(overrides: Partial<TabBarItem> = {}): TabBarItem {
 /** Die drei Standard-Tabs A, B, C in genau dieser Reihenfolge. */
 function threeItems(): TabBarItem[] {
   return [
-    createItem({ id: 'tab-a', index: 1, conversationId: 'conv-a' }),
-    createItem({ id: 'tab-b', index: 2, conversationId: 'conv-b' }),
-    createItem({ id: 'tab-c', index: 3, conversationId: 'conv-c' }),
+    createItem({ id: 'tab-a', index: 1 }),
+    createItem({ id: 'tab-b', index: 2 }),
+    createItem({ id: 'tab-c', index: 3 }),
   ];
 }
 
@@ -171,11 +173,10 @@ interface Harness {
   callbacks: TabBarCallbacks;
 }
 
-function setup(items: TabBarItem[] = threeItems(), userNamedConversationIds: string[] = []): Harness {
+function setup(items: TabBarItem[] = threeItems()): Harness {
   const containerEl = createMockEl();
   const callbacks = createCallbacks();
   const bar = new TabBar(containerEl, callbacks);
-  bar.setUserNamedConversationIds(userNamedConversationIds);
   bar.update(items);
   return { bar, containerEl, callbacks };
 }
@@ -457,9 +458,9 @@ describe('mazel: a tab keeps its number while it is open', () => {
 
     // C nach ganz vorne: neue Reihenfolge C, A, B.
     h.bar.update([
-      createItem({ id: 'tab-c', index: 1, conversationId: 'conv-c' }),
-      createItem({ id: 'tab-a', index: 2, conversationId: 'conv-a' }),
-      createItem({ id: 'tab-b', index: 3, conversationId: 'conv-b' }),
+      createItem({ id: 'tab-c', index: 1 }),
+      createItem({ id: 'tab-a', index: 2 }),
+      createItem({ id: 'tab-b', index: 3 }),
     ]);
 
     expect(labels(h)).toEqual(['3', '1', '2']);
@@ -470,9 +471,9 @@ describe('mazel: a tab keeps its number while it is open', () => {
 
     for (let round = 0; round < 3; round++) {
       h.bar.update([
-        createItem({ id: 'tab-b', index: 1, conversationId: 'conv-b' }),
-        createItem({ id: 'tab-c', index: 2, conversationId: 'conv-c' }),
-        createItem({ id: 'tab-a', index: 3, conversationId: 'conv-a' }),
+        createItem({ id: 'tab-b', index: 1 }),
+        createItem({ id: 'tab-c', index: 2 }),
+        createItem({ id: 'tab-a', index: 3 }),
       ]);
       expect(labels(h)).toEqual(['2', '3', '1']);
 
@@ -491,16 +492,16 @@ describe('mazel: a tab keeps its number while it is open', () => {
 
     // B schliessen. A und C behalten 1 und 3, es gibt jetzt eine Luecke.
     h.bar.update([
-      createItem({ id: 'tab-a', index: 1, conversationId: 'conv-a' }),
-      createItem({ id: 'tab-c', index: 2, conversationId: 'conv-c' }),
+      createItem({ id: 'tab-a', index: 1 }),
+      createItem({ id: 'tab-c', index: 2 }),
     ]);
     expect(labels(h)).toEqual(['1', '3']);
 
     // Neuer Tab D. Seine Position waere 3, frei ist aber die 2.
     h.bar.update([
-      createItem({ id: 'tab-a', index: 1, conversationId: 'conv-a' }),
-      createItem({ id: 'tab-c', index: 2, conversationId: 'conv-c' }),
-      createItem({ id: 'tab-d', index: 3, conversationId: 'conv-d' }),
+      createItem({ id: 'tab-a', index: 1 }),
+      createItem({ id: 'tab-c', index: 2 }),
+      createItem({ id: 'tab-d', index: 3 }),
     ]);
 
     expect(labels(h)).toEqual(['1', '3', '2']);
@@ -511,21 +512,25 @@ describe('mazel: a tab keeps its number while it is open', () => {
     const h = setup();
 
     h.bar.update([]);
-    h.bar.update([createItem({ id: 'tab-z', index: 1, conversationId: 'conv-z' })]);
+    h.bar.update([createItem({ id: 'tab-z', index: 1 })]);
 
     expect(labels(h)).toEqual(['1']);
   });
 
   it('a tab the user named keeps showing its name, not a number', () => {
-    const h = setup(threeItems(), ['conv-b']);
+    const h = setup([
+      createItem({ id: 'tab-a', index: 1 }),
+      createItem({ id: 'tab-b', index: 2, userNamed: true }),
+      createItem({ id: 'tab-c', index: 3 }),
+    ]);
 
     expect(labels(h)).toEqual(['1', 'Test Tab', '3']);
 
     // Auch nach dem Umsortieren bleibt der Name ein Name.
     h.bar.update([
-      createItem({ id: 'tab-b', index: 1, conversationId: 'conv-b' }),
-      createItem({ id: 'tab-a', index: 2, conversationId: 'conv-a' }),
-      createItem({ id: 'tab-c', index: 3, conversationId: 'conv-c' }),
+      createItem({ id: 'tab-b', index: 1, userNamed: true }),
+      createItem({ id: 'tab-a', index: 2 }),
+      createItem({ id: 'tab-c', index: 3 }),
     ]);
 
     expect(labels(h)).toEqual(['Test Tab', '1', '3']);
@@ -536,8 +541,8 @@ describe('mazel: a tab keeps its number while it is open', () => {
     h.bar.destroy();
 
     h.bar.update([
-      createItem({ id: 'tab-c', index: 1, conversationId: 'conv-c' }),
-      createItem({ id: 'tab-a', index: 2, conversationId: 'conv-a' }),
+      createItem({ id: 'tab-c', index: 1 }),
+      createItem({ id: 'tab-a', index: 2 }),
     ]);
 
     expect(labels(h)).toEqual(['1', '2']);

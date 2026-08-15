@@ -202,6 +202,20 @@ export class ConversationRepository {
     await this.save(conversation);
   }
 
+  /**
+   * mazel: takes the "named by hand" marker away again without touching the
+   * title. The badge goes back to its number; the history list keeps the last
+   * title it had, because a nameless entry there helps nobody.
+   */
+  async clearManualRename(id: string): Promise<void> {
+    const conversation = this.getSync(id);
+    if (!conversation?.manuallyRenamed) return;
+
+    conversation.manuallyRenamed = false;
+    conversation.updatedAt = Date.now();
+    await this.save(conversation);
+  }
+
   async update(id: string, updates: Partial<Conversation>): Promise<void> {
     const conversation = this.getSync(id);
     if (!conversation) return;

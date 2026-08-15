@@ -216,6 +216,18 @@ export interface TabData {
   /** Conversation ID bound to this tab (null for new/empty tabs). */
   conversationId: string | null;
 
+  /**
+   * mazel: a user-given name waiting for its conversation.
+   *
+   * Set in exactly two situations: the user renames a tab that has no
+   * conversation yet (nothing to hang the name on), or /clear resets a
+   * hand-named tab (the old conversation keeps its name, the next one does
+   * not exist yet). Displayed by the badge in the meantime, consumed by the
+   * first message, which applies it to the freshly created conversation via
+   * renameConversation(manual) and clears it. Null the rest of the time.
+   */
+  pendingTitle: string | null;
+
   /** Per-tab chat runtime instance for independent streaming. */
   service: ChatRuntime | null;
 
@@ -262,6 +274,8 @@ export interface PersistedTabState {
   tabId: TabId;
   conversationId: string | null;
   draftModel?: string | null;
+  /** mazel: a user-given name still waiting for its conversation. */
+  pendingTitle?: string;
 }
 
 /**
@@ -271,8 +285,6 @@ export interface PersistedTabManagerState {
   openTabs: PersistedTabState[];
   activeTabId: TabId | null;
   expandedTitleTabIds?: TabId[];
-  /** mazel: conversations the user named by hand. Survives closing the tab. */
-  userNamedConversationIds?: string[];
 }
 
 /**
@@ -321,14 +333,15 @@ export interface TabBarItem {
   /** 1-based index for display. */
   index: number;
   /**
-   * mazel: the conversation this tab is showing, or null for a blank tab.
+   * mazel: true when this tab carries a name the user chose by hand.
    *
-   * A user-given tab name has to survive closing and reopening the tab, so it
-   * is keyed on the conversation, never on the tab. Tab ids are handed out
-   * fresh when a conversation is reopened from history; keying on them would
-   * lose the name at exactly the moment the user goes looking for it.
+   * Computed by the TabManager from the conversation's `manuallyRenamed` flag
+   * (plus a pending name on a tab that has no conversation yet). The bar only
+   * displays it; the single source of truth stays on the conversation, which
+   * is what lets the name survive closing and reopening the tab — tab ids are
+   * handed out fresh when a conversation is reopened from history.
    */
-  conversationId: string | null;
+  userNamed: boolean;
   title: string;
   providerId: ProviderId;
   isActive: boolean;

@@ -132,6 +132,8 @@ export interface TabCreateOptions {
   tabId?: TabId;
   /** Restored draft model for blank tabs. */
   draftModel?: string | null;
+  /** mazel: restored user-given name still waiting for its conversation. */
+  pendingTitle?: string;
   /** Provider to inherit for blank tabs (e.g. from the active tab). */
   defaultProviderId?: ProviderId;
   onStreamingChanged?: (isStreaming: boolean) => void;
@@ -669,6 +671,10 @@ export function createTab(options: TabCreateOptions): TabData {
     set conversationId(value) {
       session.conversationId = value;
     },
+    // mazel: a user-given name waiting for its conversation (see TabData).
+    pendingTitle: typeof options.pendingTitle === 'string' && options.pendingTitle.length > 0
+      ? options.pendingTitle
+      : null,
     get service() {
       return runtimeSupervisor.current;
     },
@@ -1648,6 +1654,9 @@ export function initializeTabControllers(
     {
       plugin,
       state,
+      // mazel: /clear parks a hand-given name on the tab until the next
+      // conversation exists (see TabData.pendingTitle).
+      setPendingTitle: (title) => setTabPendingTitle(tab, title),
       renderer: tab.renderer,
       subagentManager: services.subagentManager,
       getHistoryDropdown: () => null, // Tab doesn't have its own history dropdown
@@ -1749,6 +1758,13 @@ export function initializeTabControllers(
     },
     getAuxiliaryModel: () => getTabSelectedModel(tab, plugin),
     getAgentService: () => tab.service,
+    // mazel: the first message applies a waiting user-given name to the
+    // freshly created conversation, exactly once.
+    consumePendingTitle: () => {
+      const title = tab.pendingTitle;
+      if (title !== null) setTabPendingTitle(tab, null);
+      return title;
+    },
     getSubagentManager: () => services.subagentManager,
     getTabProviderId: () => getTabProviderId(tab, plugin),
     turnOwner: tab.session,
@@ -2059,7 +2075,21 @@ export function getTabTitle(tab: TabData, plugin: FeatureHost): string {
       return conversation.title;
     }
   }
+  // mazel: a name given before the conversation exists is still the name.
+  if (tab.pendingTitle) return tab.pendingTitle;
   return 'New Chat';
+}
+
+/**
+ * mazel: sets or clears the tab's pending user-given name (see
+ * TabData.pendingTitle). Persisted with the tab state, so the name survives a
+ * restart that happens before the conversation it is waiting for.
+ */
+export function setTabPendingTitle(tab: TabData, title: string | null): void {
+  const next = title && title.trim().length > 0 ? title.trim() : null;
+  if (tab.pendingTitle === next) return;
+  tab.pendingTitle = next;
+  tab.onPersistedStateChanged?.();
 }
 
 interface TabBackgroundWorkOwner {

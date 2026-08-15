@@ -22,6 +22,10 @@ export function normalizeTabManagerState(data: unknown): AppTabManagerState | nu
       ...(typeof tab.draftModel === 'string'
         ? { draftModel: tab.draftModel }
         : {}),
+      // mazel: a user-given name still waiting for its conversation.
+      ...(typeof tab.pendingTitle === 'string' && tab.pendingTitle.length > 0
+        ? { pendingTitle: tab.pendingTitle }
+        : {}),
     });
     openTabIds.add(tab.tabId);
   }
@@ -43,34 +47,14 @@ export function normalizeTabManagerState(data: unknown): AppTabManagerState | nu
     }
   }
 
-  // mazel: conversations the user named by hand.
-  //
-  // Deliberately NOT filtered against the open tabs, unlike expandedTitleTabIds
-  // above. That filter is right for a view state that dies with its tab; it
-  // would be wrong here, because the whole point of the name is to find a
-  // CLOSED conversation again in the history list. Filtering would delete the
-  // name of every conversation the moment its tab is closed.
-  const userNamedConversationIds: string[] = [];
-  const seenNamedConversationIds = new Set<string>();
-  if (Array.isArray(data.userNamedConversationIds)) {
-    for (const conversationId of data.userNamedConversationIds) {
-      if (
-        typeof conversationId !== 'string'
-        || conversationId.length === 0
-        || seenNamedConversationIds.has(conversationId)
-      ) {
-        continue;
-      }
-
-      userNamedConversationIds.push(conversationId);
-      seenNamedConversationIds.add(conversationId);
-    }
-  }
+  // mazel: userNamedConversationIds used to be parsed here. The marker now
+  // lives on each conversation (manuallyRenamed) — one truth instead of a
+  // parallel set that could drift. Old entries in data.json are simply
+  // ignored.
 
   return {
     openTabs,
     activeTabId: typeof data.activeTabId === 'string' ? data.activeTabId : null,
     ...(expandedTitleTabIds.length > 0 ? { expandedTitleTabIds } : {}),
-    ...(userNamedConversationIds.length > 0 ? { userNamedConversationIds } : {}),
   };
 }

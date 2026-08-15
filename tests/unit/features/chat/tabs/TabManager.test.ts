@@ -48,6 +48,14 @@ jest.mock('@/features/chat/tabs/Tab', () => ({
   recycleTabRuntime: (tab: any) => mockRecycleTabRuntime(tab),
   wireTabInputEvents: (...args: any[]) => mockWireTabInputEvents(...args),
   getTabTitle: (...args: any[]) => mockGetTabTitle(...args),
+  // mazel: real behaviour, not a stub — the manager's pendingTitle plumbing is
+  // exactly this helper, and the tests below assert through it.
+  setTabPendingTitle: (tab: any, title: string | null) => {
+    const next = title && title.trim().length > 0 ? title.trim() : null;
+    if (tab.pendingTitle === next) return;
+    tab.pendingTitle = next;
+    tab.onPersistedStateChanged?.();
+  },
 }));
 
 const mockChooseForkTarget = jest.fn();
@@ -204,6 +212,7 @@ function createMockTabData(overrides: Record<string, any> = {}): any {
     hydrationState: 'ready',
     providerId: 'claude',
     conversationId: null,
+    pendingTitle: null,
     service: null,
     runtimeSupervisor,
     serviceInitialized: false,
@@ -922,6 +931,85 @@ describe('TabManager - Tab Bar Data', () => {
 
       expect(onTabRewindingChanged).toHaveBeenCalledWith(tab!.id, true);
       expect(manager.getTabBarItems().find(item => item.id === tab!.id)?.canClose).toBe(false);
+    });
+
+    // mazel: userNamed wird aus der Conversation gelesen (manuallyRenamed),
+    // nie aus einem eigenen Zustand der Leiste. Das ist der Kern des Umbaus
+    // vom 2026-08-15: eine Wahrheit statt zwei, die driften können.
+    it('mazel: reads userNamed off the conversation manuallyRenamed flag', async () => {
+      manager = createManager({
+        plugin: createMockPlugin({
+          getConversationSync: jest.fn().mockImplementation((conversationId: string) => (
+            conversationId === 'conv-named'
+              ? { id: 'conv-named', title: 'Chosen by hand', manuallyRenamed: true }
+              : { id: conversationId, title: 'Auto title' }
+          )),
+        }),
+        tabFactory: (n: number) => createMockTabData({
+          id: `tab-${n}`,
+          conversationId: n === 1 ? 'conv-named' : 'conv-auto',
+        }),
+      });
+
+      await manager.createTab();
+      await manager.createTab();
+
+      const items = manager.getTabBarItems();
+
+      expect(items[0].userNamed).toBe(true);
+      expect(items[1].userNamed).toBe(false);
+    });
+
+    it('mazel: a pending title on a conversationless tab makes the item userNamed', async () => {
+      // Der /clear-Moment und der frisch benannte Blank-Tab: es gibt noch
+      // keine Conversation, der Name hängt als pendingTitle am Tab. Das Badge
+      // muss ihn trotzdem sofort zeigen.
+      manager = createManager({
+        tabFactory: (n: number) => createMockTabData({ id: `tab-${n}`, conversationId: null }),
+      });
+
+      const tab = await manager.createTab();
+      manager.setTabPendingTitle(tab!.id, 'Named before first message');
+
+      const item = manager.getTabBarItems()[0];
+      expect(item.userNamed).toBe(true);
+
+      manager.setTabPendingTitle(tab!.id, null);
+      expect(manager.getTabBarItems()[0].userNamed).toBe(false);
+    });
+  });
+
+  describe('mazel: pendingTitle persistence', () => {
+    it('round-trips a pending title through getPersistedState and restoreState', async () => {
+      const manager = createManager({
+        tabFactory: (n: number) => createMockTabData({ id: `tab-${n}`, conversationId: null }),
+      });
+
+      const tab = await manager.createTab();
+      manager.setTabPendingTitle(tab!.id, 'Survives the restart');
+
+      const state = manager.getPersistedState();
+      expect(state.openTabs[0].pendingTitle).toBe('Survives the restart');
+
+      // Restore in einen frischen Manager: die Option muss bis in createTab
+      // durchgereicht werden, sonst ist der Name nach dem Neustart weg.
+      mockCreateTab.mockClear();
+      const restored = createManager({
+        tabFactory: (n: number) => createMockTabData({ id: `restored-${n}`, conversationId: null }),
+      });
+      await restored.restoreState(state);
+
+      const createOptions = mockCreateTab.mock.calls[0][0];
+      expect(createOptions.pendingTitle).toBe('Survives the restart');
+    });
+
+    it('does not persist an absent pending title', async () => {
+      const manager = createManager({
+        tabFactory: (n: number) => createMockTabData({ id: `tab-${n}`, conversationId: null }),
+      });
+      await manager.createTab();
+
+      expect('pendingTitle' in manager.getPersistedState().openTabs[0]).toBe(false);
     });
   });
 });

@@ -17,7 +17,7 @@ function createTabBarItem(overrides: Partial<TabBarItem> = {}): TabBarItem {
   return {
     id: 'tab-1',
     index: 1,
-    conversationId: 'conv-1',
+    userNamed: false,
     title: 'Test Tab',
     providerId: 'claude',
     isActive: false,
@@ -141,8 +141,7 @@ describe('TabBar', () => {
       const tabBar = new TabBar(containerEl, callbacks);
       const title = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
-      tabBar.setUserNamedConversationIds(['conv-1']);
-      tabBar.update([createTabBarItem({ conversationId: 'conv-1', title })]);
+      tabBar.update([createTabBarItem({ userNamed: true, title })]);
 
       expect(containerEl._children[0].textContent).toBe('ABCDEFGHIJKLMNOPQRSTUVWXYZ012...');
       expect(containerEl._children[0].textContent.endsWith('...')).toBe(true);

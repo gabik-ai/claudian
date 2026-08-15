@@ -110,6 +110,12 @@ export interface InputControllerDeps {
   resetInputHeight: () => void;
   getAuxiliaryModel?: () => string | null;
   getAgentService?: () => ChatRuntime | null;
+  /**
+   * mazel: hands over the tab's pending user-given name exactly once and
+   * clears it. Non-null when the user named a blank tab, or when /clear
+   * carried a hand-given name over to the next conversation.
+   */
+  consumePendingTitle?: () => string | null;
   getSubagentManager: () => SubagentManager;
   /** Authoritative tab/conversation provider, independent of runtime lifecycle. */
   getTabProviderId?: () => ProviderId;
@@ -1291,11 +1297,12 @@ export class InputController {
       state.currentConversationId = conversation.id;
     }
 
-    // mazel: after /clear a hand-renamed tab keeps its name — apply it and
-    // skip fallback + AI titling entirely for this conversation.
-    const inheritedTitle = conversationController.consumeInheritedTitle?.() ?? null;
-    if (inheritedTitle) {
-      await plugin.renameConversation(state.currentConversationId, inheritedTitle, { manual: true });
+    // mazel: a name the user gave before this conversation existed (blank-tab
+    // rename, or /clear carrying a hand-given name over) — apply it and skip
+    // fallback + AI titling entirely for this conversation.
+    const pendingTitle = this.deps.consumePendingTitle?.() ?? null;
+    if (pendingTitle) {
+      await plugin.renameConversation(state.currentConversationId, pendingTitle, { manual: true });
       conversationController.updateHistoryDropdown();
       return;
     }

@@ -34,6 +34,7 @@ import {
   onProviderAvailabilityChanged,
   recycleTabRuntime,
   refreshTabWorkspaceServices,
+  setTabPendingTitle,
   setupServiceCallbacks,
   wireTabInputEvents,
 } from './Tab';
@@ -60,6 +61,8 @@ function isTabManagerViewHost(value: unknown): value is TabManagerViewHost {
 type CreateTabOptions = {
   activate?: boolean;
   draftModel?: string;
+  /** mazel: restored user-given name still waiting for its conversation. */
+  pendingTitle?: string;
 };
 
 type OpenConversationOptions = {
@@ -197,7 +200,7 @@ export class TabManager implements TabManagerInterface {
     let reservationHeld = true;
 
     try {
-      const { activate = true, draftModel } = options;
+      const { activate = true, draftModel, pendingTitle } = options;
 
       const conversation = conversationId
         ? this.plugin.getCachedConversation(conversationId)
@@ -215,6 +218,7 @@ export class TabManager implements TabManagerInterface {
         conversation: conversation ?? undefined,
         tabId,
         ...(typeof draftModel === 'string' ? { draftModel } : {}),
+        ...(typeof pendingTitle === 'string' ? { pendingTitle } : {}),
         defaultProviderId,
         onStreamingChanged: (isStreaming) => {
           // mazel: raise the attention marker when an answer finishes on a tab
@@ -557,6 +561,17 @@ export class TabManager implements TabManagerInterface {
     return this.tabs.get(tabId) ?? null;
   }
 
+  /**
+   * mazel: parks a user-given name on a tab that has no conversation yet, or
+   * clears it (null). The first message applies it to the conversation it
+   * creates; see TabData.pendingTitle.
+   */
+  setTabPendingTitle(tabId: TabId, title: string | null): void {
+    const tab = this.tabs.get(tabId);
+    if (!tab) return;
+    setTabPendingTitle(tab, title);
+  }
+
   /** Gets all tabs. */
   getAllTabs(): TabData[] {
     return Array.from(this.tabs.values());
@@ -636,12 +651,18 @@ export class TabManager implements TabManagerInterface {
     let index = 1;
 
     for (const tab of this.tabs.values()) {
+      // mazel: "named by hand" is read off the conversation itself
+      // (manuallyRenamed), never off a parallel set. One truth, no drift:
+      // whoever renames the conversation — the inline rename, /clear's title
+      // inheritance, anything — the badge follows automatically.
+      const conversation = tab.conversationId
+        ? this.plugin.getConversationSync(tab.conversationId)
+        : null;
+
       items.push({
         id: tab.id,
         index: index++,
-        // mazel: needed so the tab bar can key a user-given name on the
-        // conversation instead of on the tab.
-        conversationId: tab.conversationId,
+        userNamed: !!tab.pendingTitle || conversation?.manuallyRenamed === true,
         title: getTabTitle(tab, this.plugin),
         providerId: getTabProviderId(tab, this.plugin),
         isActive: tab.id === this.activeTabId,
@@ -890,6 +911,8 @@ export class TabManager implements TabManagerInterface {
         ...(tab.lifecycleState === 'blank' && tab.draftModel
           ? { draftModel: tab.draftModel }
           : {}),
+        // mazel: a name still waiting for its conversation survives a restart.
+        ...(tab.pendingTitle ? { pendingTitle: tab.pendingTitle } : {}),
         tabId: tab.id,
         conversationId: tab.conversationId,
       });
@@ -911,6 +934,7 @@ export class TabManager implements TabManagerInterface {
           await this.createTab(tabState.conversationId, tabState.tabId, {
             activate: false,
             ...(typeof tabState.draftModel === 'string' ? { draftModel: tabState.draftModel } : {}),
+            ...(typeof tabState.pendingTitle === 'string' ? { pendingTitle: tabState.pendingTitle } : {}),
           });
         } catch {
           // Continue restoring other tabs
