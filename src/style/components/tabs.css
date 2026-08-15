@@ -98,6 +98,15 @@
   max-width: 190px;
   min-width: 8ch;
   padding: 0 8px;
+  /* Block, not flex, while editing. The badge is a flex container with
+     align-items:center, but an EMPTY contenteditable has no text node and so
+     no flex item to center — the caret then sits at the top-left corner of the
+     content box. As a block with a line-height that fills the content box
+     (24px height − 2×2px border = 20px), the caret is vertically centered
+     even in an empty field, exactly like a native <input>. */
+  display: block;
+  line-height: 20px;
+  text-align: left;
   cursor: text;
   overflow-x: auto;
   overflow-y: hidden;
