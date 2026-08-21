@@ -82,6 +82,21 @@ def check_m2(bundle: str) -> tuple[str, bool, str]:
     return fail("M2 toolbar order", "Toolbar-Factory im Bundle nicht gefunden")
 
 
+def check_m11(bundle: str) -> tuple[str, bool, str]:
+    """M11: die Bash-Zeile liest description, mit Rückfall auf command.
+
+    Zwei Stellen müssen es tun, die sichtbare Zusammenfassung und das ARIA-Label.
+    Findet sich nur eine, ist der Patch halb angekommen, und das wäre schlimmer als
+    gar nicht, weil Screenreader und Auge dann Verschiedenes melden.
+    """
+    hits = re.findall(r'\(\w+,"description"\)\.trim\(\)\|\|\w+\(\w+,"command"', bundle)
+    if len(hits) < 2:
+        upstream_only = re.search(r'case \w+:\{let \w+=\w+\(\w+,"command"\);return \w+\(\w+,60\)', bundle)
+        detail = "nur die Upstream-Variante gefunden" if upstream_only else f"{len(hits)} von 2 Stellen"
+        return fail("M11 Bash zeigt description", detail)
+    return ok("M11 Bash zeigt description", f"{len(hits)} Stellen mit Rückfall auf command")
+
+
 def check_m5(bundle: str) -> tuple[str, bool, str]:
     deny = re.search(
         r'\{continue:(![01]),hookSpecificOutput:\{hookEventName:"PreToolUse",permissionDecision:"deny"',
@@ -288,6 +303,7 @@ def main() -> int:
         check_m1(bundle),
         check_m2(bundle),
         check_m5(bundle),
+        check_m11(bundle),
         check_task_reducer(bundle),
         check_tab_rename(bundle),
         check_tab_drag(bundle),

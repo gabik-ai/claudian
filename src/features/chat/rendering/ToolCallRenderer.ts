@@ -110,7 +110,8 @@ export function getToolSummary(name: string, input: Record<string, unknown>): st
       return fileNameOnly(filePath);
     }
     case TOOL_BASH: {
-      const cmd = getInputText(input, 'command');
+      // mazel M11: die Beschreibung erklärt den Befehl, der Befehl selbst steht aufgeklappt darunter.
+      const cmd = getInputText(input, 'description').trim() || getInputText(input, 'command');
       return truncateText(cmd, 60);
     }
     case TOOL_GLOB:
@@ -158,7 +159,8 @@ export function getToolLabel(name: string, input: Record<string, unknown>): stri
     case TOOL_EDIT:
       return `Edit: ${shortenPath(getInputText(input, 'file_path')) || 'file'}`;
     case TOOL_BASH: {
-      const cmd = getInputText(input, 'command', 'command');
+      // mazel M11: dieselbe Quelle wie die sichtbare Zeile, sonst hört der Screenreader etwas anderes.
+      const cmd = getInputText(input, 'description').trim() || getInputText(input, 'command', 'command');
       return `Bash: ${cmd.length > 40 ? cmd.substring(0, 40) + '...' : cmd}`;
     }
     case TOOL_GLOB:

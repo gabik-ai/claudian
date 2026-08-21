@@ -8,7 +8,8 @@ import { normalizeGrokToolCall } from '@/providers/grok/normalization/grokToolNo
 describe('Grok tool renderer compatibility', () => {
   it.each([
     {
-      expected: { label: 'Bash: printf ok', name: 'Bash', summary: 'printf ok' },
+      // mazel M11: Grok schreibt description mit derselben Absicht wie Claude, also gilt sie auch hier.
+      expected: { label: 'Bash: Diagnostic', name: 'Bash', summary: 'Diagnostic' },
       rawInput: { command: 'printf ok', description: 'Diagnostic', is_background: false },
       rawName: 'run_terminal_command',
     },
