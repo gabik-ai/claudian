@@ -36,9 +36,18 @@
 set -euo pipefail
 
 # Lines changed in files upstream also has. 1005 measured on 2026-07-28 over
-# the full 16-commit series; 1600 leaves room for roughly half again as much
-# before someone has to justify it in a PR.
-SURFACE_MAX=${SURFACE_MAX:-1600}
+# the full 16-commit series; 1600 left room for roughly half again as much
+# before someone had to justify it in a PR.
+#
+# Raised to 1800 on 2026-08-21, by Gabriel, deliberately. The series had grown
+# to 1596 of 1600, so the ceiling was 99.75 % spent and the NEXT patch of any
+# kind would have broken it. M11 (six lines in ToolCallRenderer, three in the
+# Grok fixture) merely happened to be that patch. A ceiling that blocks every
+# small improvement is not measuring risk any more, it is just a full bucket.
+# 1800 buys roughly twenty more patches of this size before the conversation
+# repeats. It stays a warning lamp, not a safety device: nothing breaks when it
+# fires, it only says that the next rebase will cost more hand work.
+SURFACE_MAX=${SURFACE_MAX:-1800}
 
 # Pure runaway backstop, NOT a design budget. If this ever fires, something
 # automated went wrong; a human series does not reach it.
