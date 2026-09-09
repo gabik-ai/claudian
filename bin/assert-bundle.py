@@ -135,7 +135,9 @@ def check_tab_rename(bundle: str) -> tuple[str, bool, str]:
     if "toggleBadgeTitle" in bundle:
         return fail("tab rename", "toggleBadgeTitle wieder im Bundle — der einfache Doppelklick ist wieder belegt")
     # The user-named marker is a persisted object key and survives minification.
-    if "userNamedConversationIds" not in bundle:
+    # Seit 1b57206a heisst der Merker manuallyRenamed (eine Wahrheit je Tab-Name), vorher
+    # userNamedConversationIds. Der Check war seitdem falsch-rot (Befund 2026-09-09).
+    if "manuallyRenamed" not in bundle and "userNamedConversationIds" not in bundle:
         return fail("tab rename", "Merker fuer benannte Gespraeche fehlt — Badges zeigen nur Nummern")
     return ok("tab rename", "dblclick-Editor da, Upstream-Toggle entfernt, Merker vorhanden")
 
