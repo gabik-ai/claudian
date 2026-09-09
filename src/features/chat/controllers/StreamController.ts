@@ -42,6 +42,7 @@ import {
 } from '../../../utils/animationFrame';
 import { formatDurationMmSs } from '../../../utils/date';
 import { extractDiffData } from '../../../utils/diff';
+import { isInterruptDiagnosticText } from '../../../utils/interrupt';
 import { hasStreamingMathDelimiters } from '../../../utils/markdownMath';
 import { getVaultPath, normalizePathForVault } from '../../../utils/path';
 import type { FeatureHost } from '../../FeatureHost';
@@ -212,6 +213,11 @@ export class StreamController {
         break;
 
       case 'error':
+        // mazel: second layer behind ClaudeChatRuntime. Once the user cancelled,
+        // the CLI's interrupt diagnostic is not an error worth a red line.
+        if (state.cancelRequested && isInterruptDiagnosticText(chunk.content)) {
+          break;
+        }
         // Flush pending tools before rendering error message
         this.flushPendingTools();
         await this.appendText(`\n\n❌ **Error:** ${chunk.content}`);

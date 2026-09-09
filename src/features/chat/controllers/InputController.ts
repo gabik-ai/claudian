@@ -51,12 +51,13 @@ import type { MessageRenderer } from '../rendering/MessageRenderer';
 import { setToolIcon, updateToolCallResult } from '../rendering/ToolCallRenderer';
 import type { SubagentManager } from '../services/SubagentManager';
 import type { ChatState } from '../state/ChatState';
-import type { QueuedMessage } from '../state/types';
+import type { CancelReason, QueuedMessage } from '../state/types';
 import type { FileContextManager } from '../ui/FileContext';
 import type { ImageContextManager } from '../ui/ImageContext';
 import type { AddExternalContextResult, McpServerSelector } from '../ui/InputToolbar';
 import type { InstructionModeManager } from '../ui/InstructionModeManager';
 import type { StatusPanel } from '../ui/StatusPanel';
+import { EMPTY_TURN_NOTE, hasVisibleTurnText } from '../utils/emptyTurn';
 import type { BrowserSelectionController } from './BrowserSelectionController';
 import type { CanvasSelectionController } from './CanvasSelectionController';
 import type { ConversationController } from './ConversationController';
@@ -537,16 +538,37 @@ export class InputController {
         if (didCancelThisTurn && !state.pendingNewSessionPlan) {
           finalAssistantMsg.isInterrupt = true;
           if (state.currentContentEl) {
-            renderer.appendInterruptIndicator(state.currentContentEl);
+            // One argument when there is no reason: upstream's tests pin that call shape.
+            if (state.cancelReason) {
+              renderer.appendInterruptIndicator(state.currentContentEl, state.cancelReason);
+            } else {
+              renderer.appendInterruptIndicator(state.currentContentEl);
+            }
           }
         }
         streamController.hideThinkingIndicator();
         state.isStreaming = false;
         state.cancelRequested = false;
+        state.cancelReason = null;
         this.restorePendingSteerMessageToQueue();
 
         // Capture response duration before resetting state (skip for interrupted responses and compaction)
         const hasCompactBoundary = finalAssistantMsg.contentBlocks?.some(b => b.type === 'context_compacted');
+
+        // mazel: a turn that ends without a single visible sentence (only tool
+        // rows, or Codex closing with `output_text: ''`) gets a note, so the
+        // user never reads a bare timer line as the answer. Tool blocks do not
+        // count as text. Cancelled turns already carry the interrupt indicator,
+        // compaction turns their boundary. Provider-neutral by design.
+        if (
+          !didCancelThisTurn
+          && !hasCompactBoundary
+          && !hasVisibleTurnText(finalAssistantMsg, state.currentTextContent)
+        ) {
+          finalAssistantMsg.content += EMPTY_TURN_NOTE;
+          await streamController.appendText(EMPTY_TURN_NOTE);
+        }
+
         if (!didCancelThisTurn && !hasCompactBoundary) {
           const durationSeconds = state.responseStartTime
             ? Math.floor((performance.now() - state.responseStartTime) / 1000)
@@ -1372,10 +1394,14 @@ export class InputController {
   // Streaming Control
   // ============================================
 
-  cancelStreaming(): void {
+  // mazel: callers say where the cancel came from (Escape key, Stop button);
+  // everything else counts as 'system'. The finally block hands it to the
+  // interrupt indicator.
+  cancelStreaming(reason: CancelReason = 'system'): void {
     const { state, streamController } = this.deps;
     if (!state.isStreaming) return;
     state.cancelRequested = true;
+    state.cancelReason = reason;
     // Restore queued message to input instead of discarding
     this.restorePendingMessagesToInput();
     this.getAgentService()?.cancel();

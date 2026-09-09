@@ -87,6 +87,11 @@
   color: var(--text-muted);
 }
 
+/* mazel: source of the cancel (Escape, Stop) next to the interrupt indicator */
+.claudian-interrupted-source {
+  color: var(--text-muted);
+}
+
 .claudian-text-block {
   position: relative;
   margin: 0;

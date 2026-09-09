@@ -1211,7 +1211,7 @@ function initializeInputToolbar(
       void tab.controllers.inputController?.sendMessage();
     },
     onStop: () => {
-      tab.controllers.inputController?.cancelStreaming();
+      tab.controllers.inputController?.cancelStreaming('stop');
     },
   });
   tab.ui.sendStopButton.setStreaming(tab.state.isStreaming);
@@ -1864,7 +1864,7 @@ export function wireTabInputEvents(tab: TabData, plugin: FeatureHost): void {
     // Check !e.isComposing for IME support (Chinese, Japanese, Korean, etc.)
     if (e.key === 'Escape' && !e.isComposing && state.isStreaming) {
       e.preventDefault();
-      controllers.inputController?.cancelStreaming();
+      controllers.inputController?.cancelStreaming('escape');
       return;
     }
 

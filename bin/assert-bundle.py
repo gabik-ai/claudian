@@ -280,6 +280,29 @@ def check_send_stop(bundle: str, plugin_dir: str) -> tuple[str, bool, str]:
     return ok("send/stop button", "Zustaende, Icon-Paar, Farb-Umkehrung, Position, Fuellung")
 
 
+def check_interrupt_source(bundle: str, plugin_dir: str) -> tuple[str, bool, str]:
+    """Patch 18: Abbruch mit Quelle, stumme CLI-Diagnose, Hinweis bei leerem Zug.
+
+    Drei Zeichenketten, die nur dieser Patch ins Bundle bringt: die Klasse der
+    Quell-Spanne, der Diagnose-Präfix des CLI und der deutsche Hinweistext.
+    Dazu die CSS-Regel, damit die Quelle nicht in der Textfarbe untergeht.
+    """
+    if '"claudian-interrupted-source"' not in bundle and "'claudian-interrupted-source'" not in bundle:
+        return fail("interrupt source", "Quell-Spanne fehlt, Abbruch sagt nicht, woher er kam")
+    if "[ede_diagnostic]" not in bundle:
+        return fail("interrupt source", "Diagnose-Präfix fehlt, rote CLI-Zeile nach Abbruch käme zurück")
+    if "(Antwort ohne Text beendet)" not in bundle:
+        return fail("interrupt source", "Hinweis für leeren Zug fehlt")
+    css_path = os.path.join(plugin_dir, "styles.css")
+    if not os.path.isfile(css_path):
+        return fail("interrupt source", "styles.css fehlt, Aussehen nicht prüfbar")
+    with open(css_path, encoding="utf8") as fh:
+        css = fh.read()
+    if ".claudian-interrupted-source {" not in css:
+        return fail("interrupt source", "CSS-Regel fehlt in styles.css")
+    return ok("interrupt source", "Quell-Spanne, Diagnose-Präfix, Hinweistext und CSS-Regel")
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
@@ -310,6 +333,7 @@ def main() -> int:
         check_attention_trigger(bundle),
         check_send_stop(bundle, plugin_dir),
         check_permission_chip(bundle, plugin_dir),
+        check_interrupt_source(bundle, plugin_dir),
     ]
 
     failed = 0

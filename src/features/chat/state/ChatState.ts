@@ -1,6 +1,7 @@
 import { TaskStateReducer } from '../../../core/tools/taskState';
 import type { UsageInfo } from '../../../core/types';
 import type {
+  CancelReason,
   ChatMessage,
   ChatStateCallbacks,
   ChatStateData,
@@ -16,6 +17,7 @@ function createInitialState(): ChatStateData {
     messages: [],
     isStreaming: false,
     cancelRequested: false,
+    cancelReason: null,
     streamGeneration: 0,
     isCreatingConversation: false,
     isSwitchingConversation: false,
@@ -123,6 +125,15 @@ export class ChatState {
 
   set cancelRequested(value: boolean) {
     this.state.cancelRequested = value;
+  }
+
+  // mazel: source of the last cancel, see CancelReason.
+  get cancelReason(): CancelReason | null {
+    return this.state.cancelReason;
+  }
+
+  set cancelReason(value: CancelReason | null) {
+    this.state.cancelReason = value;
   }
 
   get streamGeneration(): number {
@@ -433,6 +444,7 @@ export class ChatState {
     this.state.currentThinkingState = null;
     this.state.isStreaming = false;
     this.state.cancelRequested = false;
+    this.state.cancelReason = null;
     // Clear thinking indicator timeout
     this.clearThinkingIndicatorTimeout();
     // Clear response timer

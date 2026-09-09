@@ -753,7 +753,7 @@ export class ClaudianView extends ItemView {
       if (!e.defaultPrevented) {
         const activeTab = this.tabManager?.getActiveTab();
         if (activeTab?.state.isStreaming) {
-          activeTab.controllers.inputController?.cancelStreaming();
+          activeTab.controllers.inputController?.cancelStreaming('escape');
         }
       }
       return false;

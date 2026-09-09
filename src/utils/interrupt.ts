@@ -42,3 +42,16 @@ export function stripLegacyInterruptIndicator(text: string): {
     interrupted: true,
   };
 }
+
+// mazel: the Claude CLI closes an interrupted turn with a `result` whose
+// `errors` carry one diagnostic line, measured 2026-09-09 after Escape:
+//   [ede_diagnostic] result_type=user last_content_type=n/a stop_reason=tool_use(background task completed)
+// It describes the state the interrupt left behind, not a failure the user
+// can act on. Claudian rendered it as a red error under the "Interrupted"
+// indicator. Both the runtime and the stream renderer use this predicate to
+// drop that line once a cancel happened; every other error stays visible.
+export const INTERRUPT_DIAGNOSTIC_PREFIX = '[ede_diagnostic]';
+
+export function isInterruptDiagnosticText(text: string): boolean {
+  return text.trimStart().startsWith(INTERRUPT_DIAGNOSTIC_PREFIX);
+}

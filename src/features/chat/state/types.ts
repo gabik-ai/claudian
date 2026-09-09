@@ -44,6 +44,11 @@ export interface StoredSelection {
   domRanges?: Range[];
 }
 
+// mazel: where a cancel came from, so the interrupt indicator can name it.
+// 'system' covers every caller that does not pass a reason (plugin unload,
+// tab close, conversation switch).
+export type CancelReason = 'escape' | 'stop' | 'system';
+
 /** Centralized chat state data. */
 export interface ChatStateData {
   // Message state
@@ -52,6 +57,8 @@ export interface ChatStateData {
   // Streaming control
   isStreaming: boolean;
   cancelRequested: boolean;
+  // mazel: set together with cancelRequested, cleared with it.
+  cancelReason: CancelReason | null;
   streamGeneration: number;
   /** Guards against concurrent operations during conversation creation. */
   isCreatingConversation: boolean;

@@ -30,6 +30,7 @@ import {
 import { applyStilFilter } from '../../../utils/stilFilter';
 import type { FeatureHost } from '../../FeatureHost';
 import { findRewindContext } from '../rewind';
+import type { CancelReason } from '../state/types';
 import { formatConversationDirectoryTitle } from '../utils/conversationDirectoryTitle';
 import { resolveSubagentAdapter } from './subagentAdapterResolution';
 import {
@@ -361,10 +362,19 @@ export class MessageRenderer {
     this.appendInterruptIndicator(contentEl);
   }
 
-  appendInterruptIndicator(contentEl: HTMLElement): void {
+  // mazel: the indicator names where the cancel came from (Escape or the
+  // Stop button) between the word and the hint. Upstream's spans and classes
+  // stay untouched so its tests and the legacy-marker parser keep working; a
+  // cancel without a known source ('system', stored history) renders as before.
+  appendInterruptIndicator(contentEl: HTMLElement, source?: CancelReason | null): void {
     const textEl = contentEl.createDiv({ cls: 'claudian-text-block' });
     textEl.createSpan({ cls: 'claudian-interrupted', text: 'Interrupted' });
     textEl.appendText(' ');
+    const sourceLabel = source === 'escape' ? 'Escape' : source === 'stop' ? 'Stop' : null;
+    if (sourceLabel) {
+      textEl.createSpan({ cls: 'claudian-interrupted-source', text: `\u00B7 ${sourceLabel}` });
+      textEl.appendText(' ');
+    }
     textEl.createSpan({
       cls: 'claudian-interrupted-hint',
       text: '\u00B7 What should Claudian do instead?',

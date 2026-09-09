@@ -61,6 +61,7 @@ import type {
 import type { ClaudianSettings, PermissionMode } from '../../../core/types/settings';
 import { stripCurrentNoteContext } from '../../../utils/context';
 import { getEnhancedPath, getMissingNodeError, parseEnvironmentVariables } from '../../../utils/env';
+import { isInterruptDiagnosticText } from '../../../utils/interrupt';
 import { getVaultPath } from '../../../utils/path';
 import {
   buildContextFromHistory,
@@ -205,6 +206,12 @@ export class ClaudianService implements ChatRuntime {
   private _autoTurnSawStreamText = false;
   private _autoTurnSawStreamThinking = false;
   private _autoTurnCallback: AutoTurnCallback | null = null;
+  // mazel: true from cancel() until the next query() starts. The CLI answers an
+  // interrupt with a `result` carrying `[ede_diagnostic] ...` in `errors`; it
+  // may reach us through the live handler or, after the handler is gone, as
+  // an auto-triggered turn. Both paths go through routeMessage, so the drop
+  // lives there and needs a flag that outlives the cancelled turn.
+  private interruptedSinceLastQuery = false;
   private turnMetadata: ChatTurnMetadata = {};
   private bufferedUsageChunk: StreamChunk & { type: 'usage' } | null = null;
   private streamTransformState = createTransformStreamState();
@@ -1059,6 +1066,16 @@ export class ClaudianService implements ChatRuntime {
           this._autoTurnBuffer.push(usageChunk);
         }
       } else if (isStreamChunk(event)) {
+        // mazel: drop the CLI's interrupt diagnostic after a cancel, see
+        // interruptedSinceLastQuery. Any other error stays.
+        if (
+          event.type === 'error'
+          && message.type === 'result'
+          && this.interruptedSinceLastQuery
+          && isInterruptDiagnosticText(event.content)
+        ) {
+          continue;
+        }
         // Dedup: SDK delivers text via stream_events (incremental) AND the assistant message
         // (complete). Skip the assistant message text if stream text was already seen.
         if (message.type === 'assistant' && event.type === 'text') {
@@ -1321,6 +1338,7 @@ export class ClaudianService implements ChatRuntime {
     if (this.sessionManager.wasInterrupted()) {
       this.sessionManager.clearInterrupted();
     }
+    this.interruptedSinceLastQuery = false;
 
     // Session mismatch recovery: SDK returned a different session ID (context lost)
     // Inject history to restore context without forcing cold-start
@@ -1818,6 +1836,7 @@ export class ClaudianService implements ChatRuntime {
 
   cancel() {
     this.approvalDismisser?.();
+    this.interruptedSinceLastQuery = true;
 
     if (this.abortController) {
       this.abortController.abort();
