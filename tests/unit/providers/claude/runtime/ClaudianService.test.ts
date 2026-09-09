@@ -410,6 +410,34 @@ describe('ClaudianService', () => {
       expect(startPersistentQuerySpy).toHaveBeenCalled();
     });
 
+    it('forwards the provider transition owner context to CLI resolution on forced restart', async () => {
+      // Regression: without the owner context, getResolvedProviderCliPath waits for the very
+      // provider transition that triggered this restart (main.ts applyEnvironmentVariables),
+      // and the runtime never comes back. Measured 2026-09-09 while switching CLAUDE_CONFIG_DIR.
+      service.setSessionId('test-session');
+      jest.spyOn(service as any, 'startPersistentQuery').mockResolvedValue(undefined);
+
+      await service.ensureReady({ force: true, providerTransitionOwner: true });
+
+      expect(mockPlugin.getResolvedProviderCliPath).toHaveBeenCalledWith(
+        'claude',
+        { providerTransitionOwner: true },
+      );
+    });
+
+    it('does not claim transition ownership for an ordinary forced restart', async () => {
+      service.setSessionId('test-session');
+      jest.spyOn(service as any, 'startPersistentQuery').mockResolvedValue(undefined);
+
+      await service.ensureReady({ force: true });
+
+      expect(mockPlugin.getResolvedProviderCliPath).toHaveBeenCalledWith('claude', undefined);
+      expect(mockPlugin.getResolvedProviderCliPath).not.toHaveBeenCalledWith(
+        'claude',
+        expect.objectContaining({ providerTransitionOwner: true }),
+      );
+    });
+
     it('should use the synced conversation model when starting a persistent query', async () => {
       service.syncConversationState({
         sessionId: null,

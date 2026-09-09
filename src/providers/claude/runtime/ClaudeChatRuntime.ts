@@ -570,11 +570,19 @@ export class ClaudianService implements ChatRuntime {
     // Auto-resolve session ID from sessionManager if not explicitly provided
     const effectiveSessionId = options?.sessionId ?? this.sessionManager.getSessionId() ?? undefined;
     const externalContextPaths = options?.externalContextPaths ?? this.currentExternalContextPaths;
+    // Ein Aufruf aus einer laufenden Provider-Transition (Env-Wechsel, main.ts
+    // restartEnvironmentAffectedRuntimes) darf nicht auf das Ende genau dieser Transition
+    // warten: ohne den Owner-Kontext blockiert getResolvedProviderCliPath in
+    // ensureInitialized → waitForProviderTransitions, bis release() läuft, und release()
+    // läuft erst nach diesem ensureReady. Codex und Grok reichen den Kontext bereits durch.
+    const cliContext = options?.providerTransitionOwner === true
+      ? { providerTransitionOwner: true as const }
+      : undefined;
 
     // Case 1: Not running → try to start
     if (!this.persistentQuery) {
       if (!vaultPath) return false;
-      const cliPath = await this.plugin.getResolvedProviderCliPath('claude');
+      const cliPath = await this.plugin.getResolvedProviderCliPath('claude', cliContext);
       if (!cliPath) return false;
       await this.startPersistentQuery(vaultPath, cliPath, effectiveSessionId, externalContextPaths);
       return true;
@@ -585,7 +593,7 @@ export class ClaudianService implements ChatRuntime {
     if (options?.force) {
       this.closePersistentQuery('forced restart', { preserveHandlers: options.preserveHandlers });
       if (!vaultPath) return false;
-      const cliPath = await this.plugin.getResolvedProviderCliPath('claude');
+      const cliPath = await this.plugin.getResolvedProviderCliPath('claude', cliContext);
       if (!cliPath) return false;
       await this.startPersistentQuery(vaultPath, cliPath, effectiveSessionId, externalContextPaths);
       return true;
@@ -594,7 +602,7 @@ export class ClaudianService implements ChatRuntime {
     // Case 3: Check if config changed → restart if needed
     // We need vaultPath and cliPath to build config for comparison
     if (!vaultPath) return false;
-    const cliPath = await this.plugin.getResolvedProviderCliPath('claude');
+    const cliPath = await this.plugin.getResolvedProviderCliPath('claude', cliContext);
     if (!cliPath) return false;
 
     const newConfig = this.buildPersistentQueryConfig(vaultPath, cliPath, externalContextPaths);
@@ -602,7 +610,7 @@ export class ClaudianService implements ChatRuntime {
       // Close FIRST, then try to start new one (allows fallback if CLI unavailable)
       this.closePersistentQuery('config changed', { preserveHandlers: options?.preserveHandlers });
       // Re-check CLI path as it might have changed during close
-      const cliPathAfterClose = await this.plugin.getResolvedProviderCliPath('claude');
+      const cliPathAfterClose = await this.plugin.getResolvedProviderCliPath('claude', cliContext);
       if (cliPathAfterClose) {
         await this.startPersistentQuery(vaultPath, cliPathAfterClose, effectiveSessionId, externalContextPaths);
         return true;
