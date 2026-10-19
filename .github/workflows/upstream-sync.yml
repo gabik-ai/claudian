@@ -101,7 +101,9 @@ jobs:
           else
             echo "uptodate=0" >> "$GITHUB_OUTPUT"
             echo "Upstream $VERSION ($NEW_SHA), unsere Basis $OLD_SHA"
-            git log --oneline "$OLD_SHA..$NEW_SHA" | head -40
+            # -n instead of "| head": head closes the pipe after 40 lines, git dies of
+            # SIGPIPE (exit 141) and pipefail fails the step whenever upstream is >40 ahead.
+            git log --oneline -n 40 "$OLD_SHA..$NEW_SHA"
           fi
 
       - name: Fast-forward the mirror branch
