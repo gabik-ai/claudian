@@ -199,6 +199,7 @@ jobs:
           } > /tmp/pr-body.md
 
           gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
             --base mazel \
             --head "${{ steps.rebase.outputs.branch }}" \
             --title "sync: upstream ${{ steps.range.outputs.version }} (${{ steps.range.outputs.short }})" \
@@ -234,5 +235,6 @@ jobs:
           } > /tmp/issue.md
 
           gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
             --title "sync: Rebase auf ${{ steps.range.outputs.version }} braucht eine Entscheidung" \
             --body-file /tmp/issue.md
