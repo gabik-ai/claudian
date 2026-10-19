@@ -234,6 +234,14 @@ jobs:
             echo "upstream nativ und kann ersatzlos raus?"
           } > /tmp/issue.md
 
+          TITLE="sync: Rebase auf ${{ steps.range.outputs.version }} braucht eine Entscheidung"
+          # One open issue per upstream version: the weekly cron must not stack duplicates.
+          # Captured first, not piped into grep -q: same SIGPIPE trap as the git log fix.
+          OPEN_TITLES=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --json title --jq '.[].title')
+          if printf '%s\n' "$OPEN_TITLES" | grep -qxF "$TITLE"; then
+            echo "Issue already open: $TITLE"
+            exit 0
+          fi
           gh issue create \
             --repo "$GITHUB_REPOSITORY" \
             --title "sync: Rebase auf ${{ steps.range.outputs.version }} braucht eine Entscheidung" \
